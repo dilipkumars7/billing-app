@@ -1,0 +1,16 @@
+// src/components/ProtectedRoute.tsx
+import React from "react";
+import { Navigate } from "react-router";
+
+import { isAuthenticated } from "./auth";
+
+interface Props {
+  children: React.ReactNode;
+}
+
+export default function ProtectedRoute({ children }: Props) {
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+}

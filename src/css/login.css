@@ -1,0 +1,142 @@
+
+.anime-bg{
+  position: relative;
+  background-attachment: fixed; 
+  background-repeat: no-repeat;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 800 800'%3E%3Cg fill-opacity='0.07'%3E%3Ccircle fill='%230055CC' cx='400' cy='400' r='600'/%3E%3Ccircle fill='%23034eb8' cx='400' cy='400' r='500'/%3E%3Ccircle fill='%230547a4' cx='400' cy='400' r='400'/%3E%3Ccircle fill='%23074091' cx='400' cy='400' r='300'/%3E%3Ccircle fill='%2308397e' cx='400' cy='400' r='200'/%3E%3Ccircle fill='%2309326C' cx='400' cy='400' r='100'/%3E%3C/g%3E%3C/svg%3E");
+  background-color: #0055CC;
+  background-position: 12% 90%;
+}
+
+.grainy-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: -1; /* Ensures it stays behind content */
+  background-color: transparent;
+}
+
+.grainy-bg::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: inherit; /* Inherits the background from .anime-bg */
+  filter: url(#grainy); /* Apply the grainy effect only here */
+}
+
+
+
+/* .anime-bg {
+  background-color: #0052CC;
+  background-attachment: fixed; 
+  background-repeat: no-repeat;
+  background-image: 
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 800 800'%3E%3Cg fill-opacity='0.07'%3E%3Ccircle fill='%230055CC' cx='400' cy='400' r='600'/%3E%3Ccircle fill='%23034eb8' cx='400' cy='400' r='500'/%3E%3Ccircle fill='%230547a4' cx='400' cy='400' r='400'/%3E%3Ccircle fill='%23074091' cx='400' cy='400' r='300'/%3E%3Ccircle fill='%2308397e' cx='400' cy='400' r='200'/%3E%3Ccircle fill='%2309326C' cx='400' cy='400' r='100'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(rgba(0, 0, 0, 0.1) 50%, rgba(255, 255, 255, 0.1) 50%),
+    url("https://www.transparenttextures.com/patterns/asfalt-dark.png");
+  background-blend-mode: overlay;
+} */
+
+
+.autoplay-progress {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  z-index: 10;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  color: #fff;
+}
+
+.autoplay-progress svg {
+  --progress: 0;
+  position: absolute;
+  left: 0;
+  top: 0px;
+  z-index: 10;
+  width: 100%;
+  height: 100%;
+  stroke-width: 2.5px;
+  stroke: #fff;
+  fill: none;
+  stroke-dashoffset: calc(94.24778px * (1 - var(--progress)));
+  stroke-dasharray: 94.24778;
+  transform: rotate(-90deg);
+}
+
+.custom-bullet {
+  display: inline-block;
+  width: 7px; /* Default width */
+  height: 5px; /* Small rectangle shape */
+  background-color: #ccc; /* Default color */
+  margin: 0 2px;
+  border-radius: 1.5px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.custom-bullet.active {
+  width: 14px; /* Wider when active */
+  background-color: #ffffff; /* Highlighted color */
+}
+
+.button-65 {
+  --ds-background-brand-bold-hovered: #0055CC;
+  --ds-background-brand-bold: #0C66E4;
+  --ds-text-inverse: #FFFFFF;
+  --ds-border-focused: #388BFF;
+  --ds-background-brand-bold-pressed: #09326C;
+  -webkit-box-align: baseline;
+  align-items: baseline;
+  border-width: 0px;
+  border-radius: var(--ds-border-radius, 3px);
+  box-sizing: border-box;
+  display: inline-flex;
+  font-size: inherit;
+  font-style: normal;
+  font-family: inherit;
+  font-weight: 500;
+  max-width: 100%;
+  position: relative;
+  text-align: center;
+  text-decoration: none;
+  transition: background 0.1s ease-out, box-shadow 0.15s cubic-bezier(0.47, 0.03, 0.49, 1.38);
+  white-space: nowrap;
+  background: var(--ds-background-brand-bold, #0052CC);
+  cursor: pointer;
+  padding: 0px 10px;
+  vertical-align: middle;
+  width: 100%;
+  -webkit-box-pack: center;
+  justify-content: center;
+  color: var(--ds-text-inverse, #FFFFFF) !important;
+  height: 40px !important;
+  line-height: 40px !important;
+}
+
+.button-65:hover {
+  background: var(--ds-background-brand-bold-hovered, #0065FF);
+  text-decoration: inherit;
+  transition-duration: 0s, 0.1s;
+  color: var(--ds-text-inverse, #FFFFFF) !important;
+}
+
+.button-65:active{
+  background: #0747A6;
+  transition-duration: 0s, 0s;
+  color: var(--ds-text-inverse, #FFFFFF) !important;
+}
+
+.button-65:disabled{
+  opacity: 0.5;
+  cursor: not-allowed;
+}
