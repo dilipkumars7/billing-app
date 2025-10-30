@@ -1,11 +1,11 @@
 // src/pages/index.tsx
 import { Routes, Route, Navigate } from "react-router";
-import Dashboard from "./dashboard";
 import Login from "./login";
 import NotFound from "./not-found";
 import ProtectedRoute from "../auth/ProtectedRoute";
-import Sidebar from "../components/Sidebar";
-import Navbar from "../components/Navbar";
+import Layout from "./layout";
+import Dashboard from "./dashboard";
+import List from './list';
 
 export default function AppRoutes() {
   return (
@@ -16,19 +16,17 @@ export default function AppRoutes() {
       <Route path="/login" element={<Login />} />
 
       {/* Protected route */}
-      <Route path="/*" element={
+      <Route
+        path="/*"
+        element={
           <ProtectedRoute>
-            <Navbar />
-            <Sidebar />
-            <section className="hero_section">
-              <Routes>
-                <Route path="dashboard" element={<Dashboard />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </section>
+            <Layout />
           </ProtectedRoute>
         }
-      />
+      >
+        <Route path="dashboard" element={<Dashboard />} />
+        <Route path="list" element={<List />} />
+      </Route>
 
       <Route path="*" element={<NotFound />} />
     </Routes>

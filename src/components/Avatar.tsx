@@ -35,7 +35,7 @@ export default function Avatar({ size, email, name, imgSrc }: AvatarProps) {
         canvas.height = size;
         context.fillStyle = colours[colourIndex - 1];
         context.fillRect(0, 0, size, size);
-        context.font = `${Math.round(size / 2.2)}px "Coolvetica"`;
+        context.font = `${Math.round(size / 2.2)}px "DKSans"`;
         context.textAlign = 'center';
         context.fillStyle = '#FFF';
         context.fillText(initials, size / 2, size / 1.5);

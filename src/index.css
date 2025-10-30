@@ -21,14 +21,13 @@
 
 @font-face{
   font-family: "DKSans";
-  src: url('../public/fonts/Zoho-Puvi-Regular.ttf') format('truetype');
-  font-style:normal;
-  font-display:swap;
+  src: url('../public/fonts/LexendDeca-VariableFont_wght.ttf') format('truetype');
 }
 
 
 *{
   font-family: 'DKSans';
+  letter-spacing: 0.2px
 }
 
 .hero_section{
