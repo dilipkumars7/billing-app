@@ -1,5 +1,3 @@
-/** @jsxImportSource @emotion/react */
-import React from "react";
 import '../css/common.css'
 import styled from "@emotion/styled";
 import { css } from "@emotion/react";
@@ -16,12 +14,11 @@ export default function Sidebar() {
             return (
               <StyledNavLink key={item.name} to={item.path} end>
                 {({ isActive }) => (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
                     {IconComponent && (
                       <IconWrapper isActive={isActive}>
                         <IconComponent
-                          size="18"
-                          variant="Outline"
+                          size="22"
                         />
                       </IconWrapper>
                     )}
@@ -111,18 +108,6 @@ const IconWrapper = styled.span<{ isActive: boolean }>`
   align-items: center;
   justify-content: center;
   color: inherit;
-
-  svg {
-    path,
-    line,
-    polyline,
-    rect,
-    circle {
-      stroke-width: ${({ isActive }) => (isActive ? 0.5 : 0.2)}; /* 👈 Thicker stroke via CSS */
-      stroke: ${({ isActive }) => (isActive ? "#0C66E4" : "#172B4D")};
-      transition: stroke 0.2s ease, stroke-width 0.2s ease;
-    }
-  }
 `;
 
 const Label = styled.span`

@@ -1,7 +1,6 @@
-import React from 'react'
 import '../css/common.css'
 import Avatar from './Avatar'
-import { SidebarLeft, SidebarRight } from 'iconsax-reactjs'
+import { GoSidebarCollapse, GoSidebarExpand } from "react-icons/go";
 import Button from './button'
 
 interface NavbarProps {
@@ -19,7 +18,7 @@ export default function Navbar({ isOpen, onToggle }: NavbarProps) {
       <div className='w-full flex gap-5'>
         <div className='flex items-center gap-4'>
           <Button 
-            icon={isOpen ? SidebarLeft : SidebarRight} 
+            icon={isOpen ? GoSidebarExpand : GoSidebarCollapse} 
             onClick={handleToggleClick}
           />
           <span className='text-lg font-bold'>Logo</span>

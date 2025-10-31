@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -7,10 +7,6 @@ import { useNavigate } from "react-router-dom";;
 import Input from "../components/Input";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay, Pagination, Navigation } from "swiper/modules";
-import "swiper/css";
-import "swiper/css/navigation";
-import "swiper/css/pagination";
-import "swiper/css/scrollbar";
 import '../css/login.css'
 
 
@@ -71,7 +67,7 @@ export default function Login() {
     }
   };
 
-  const { register, handleSubmit, formState: {errors, isValid} } = useForm<FormData>({
+  const { register, handleSubmit, formState: {errors} } = useForm<FormData>({
     resolver: zodResolver(schema), 
     mode: "onChange"
   });
