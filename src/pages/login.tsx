@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useNavigate } from "react-router-dom";;
 import Input from "../components/Input";
 import { Swiper, SwiperSlide } from "swiper/react";
+import type { Swiper as SwiperType } from "swiper";
 import { Autoplay, Pagination, Navigation } from "swiper/modules";
 import '../css/login.css'
 
@@ -60,7 +61,7 @@ export default function Login() {
     };
   }, [activeIndex])
 
-  const onAutoplayTimeLeft = (s, time: number, progress: number) => {
+  const onAutoplayTimeLeft = (_s:SwiperType, time: number, progress: number) => {
     if (progressCircle.current && progressContent.current) {
       progressCircle.current.style.setProperty("--progress", (1 - progress).toString());
       progressContent.current.textContent = `${Math.ceil(time / 1000)}s`;
@@ -75,8 +76,8 @@ export default function Login() {
   const navigate = useNavigate();
 
   const onSubmit = (data: FormData) => {
-    cookieStore.set('email', data.email);
-    cookieStore.set('user', 'admin');
+    document.cookie = `email=${data.email}; path=/; SameSite=Lax`;
+    document.cookie = `user=admin; path=/; SameSite=Lax`;
     
     console.log("Form Submitted:", data);
     navigate('/dashboard');
@@ -127,7 +128,7 @@ export default function Login() {
             pagination={{
               clickable: true,
               type: "custom",
-              renderCustom: (swiper, current, total) => {
+              renderCustom: (_swiper, current, total) => {
                 return Array.from({ length: total }, (_, i) =>
                   `<span class="custom-bullet ${i + 1 === current ? "active" : ""}" data-index="${i}"></span>`
                 ).join("");

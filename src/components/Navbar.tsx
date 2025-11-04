@@ -1,7 +1,7 @@
 import '../css/common.css'
 import Avatar from './Avatar'
 import { GoSidebarCollapse, GoSidebarExpand } from "react-icons/go";
-import Button from './button'
+import { Button } from 'antd'
 
 interface NavbarProps {
   isOpen: boolean;
@@ -17,8 +17,9 @@ export default function Navbar({ isOpen, onToggle }: NavbarProps) {
     <>
       <div className='w-full flex gap-5'>
         <div className='flex items-center gap-4'>
-          <Button 
-            icon={isOpen ? GoSidebarExpand : GoSidebarCollapse} 
+          <Button
+            type="text"
+            icon={isOpen ? <GoSidebarCollapse size={20} /> : <GoSidebarExpand size={20} />}
             onClick={handleToggleClick}
           />
           <span className='text-lg font-bold'>Logo</span>

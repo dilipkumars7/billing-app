@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import styled from "@emotion/styled";
 import { Button, Dropdown, MenuProps } from "antd";
 import { HiArrowNarrowUp, HiArrowNarrowDown } from "react-icons/hi";
@@ -77,6 +77,7 @@ const Cell = styled.div<{ isHovered: boolean; isHeaserCell: boolean }>`
   box-sizing: border-box;
   flex-shrink: 0;
   min-width: 150px;
+  text-overflow: ellipsis;
   border-right: ${(props) =>
     props.isHovered ? "3px solid #408CF9" : "1px solid #091E4224"};
 `;

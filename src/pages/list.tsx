@@ -1,246 +1,70 @@
-import Table from '../components/Table'
+import { useEffect, useState } from "react";
+import Table from "../components/Table";
 
+export default function MovieList() {
+  const [TableHeader, setTableHeader] = useState<any[]>([]);
+  const [TableData, setTableData] = useState<any[]>([]);
 
-export default function list() {
+  const API_URL =
+    "https://api.themoviedb.org/3/discover/movie?api_key=ecd1484bdf4c4701a8e2c072903553ee&language=en-US&sort_by=popularity.desc&include_adult=false&include_video=false";
 
-  const Header =[
-    {
-      headerName: "Device Name",
-      field: "device_name",
-      defaultWidth: "300",
-    },
-    {
-      headerName: "Device Code",
-      field: "device_code",
-      defaultWidth: "300",
-    },
-    {
-      headerName: "Zone Name",
-      field: "zone_name",
-      defaultWidth: "300",
-    },
-    {
-      headerName: "Date",
-      field: "date",
-      defaultWidth: "300",
-    },
-    {
-      headerName: "FFFFG",
-      field: "FFFFG",
-      defaultWidth: "300",
-    },
-    {
-      headerName: "FFFFG12",
-      field: "FFFFG12",
-      defaultWidth: "200",
-    }
-  ]
+  useEffect(() => {
+    fetch(API_URL)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.results && data.results.length > 0) {
+          // ✅ Keep only desired fields
+          const desiredFields = [
+            "title",
+            "release_date",
+            "original_language",
+            "popularity",
+            "vote_average",
+            "vote_count",
+            "overview",
+          ];
 
+          const getWidth = (key: string) => {
+            const baseWidth = 150;
+            const extraPerChar = 10; // adjust for longer names
+            const minWidth = 120;
+            const maxWidth = 400;
+            const width = baseWidth + key.length * extraPerChar;
+            return Math.min(Math.max(width, minWidth), maxWidth); // clamp between min and max
+          };
+
+          // ✅ Generate headers only for desired fields
+          const headers = desiredFields.map((key) => ({
+            headerName: key.replace(/_/g, " ").toUpperCase(),
+            field: key,
+            defaultWidth: getWidth(key),
+          }));
+
+          // ✅ Filter data to include only desired fields
+          const filteredData = data.results.map((movie: any) => {
+            const filtered: Record<string, any> = {};
+            desiredFields.forEach((field) => {
+              filtered[field] = movie[field];
+            });
+            return filtered;
+          });
+
+          setTableHeader(headers);
+          setTableData(filteredData);
+        }
+      })
+      .catch((err) => console.error("API Error:", err));
+  }, []);
 
   return (
     <div>
-      <h3>My Jira-Style List View</h3>
-      <Table TableHeader={Header} TableData={Data} />
+      <h3>🎬 Popular Movies (From TMDB API)</h3>
+
+      {TableHeader.length > 0 ? (
+        <Table TableHeader={TableHeader} TableData={TableData} />
+      ) : (
+        <p>Loading movies...</p>
+      )}
     </div>
-  )
+  );
 }
-
-
-const Data = [
-    {
-      "5RTR": 16.8853,
-      "date": "2025-10-29",
-      "FFFFG": 8.7099,
-      "GENW1": 3.9192,
-      "FFFFG12": 18.6875,
-      "SHIFT 2": 80.7822,
-      "zone_name": "Utility",
-      "GENERAL134": 68.4717,
-      "NIGHT SHIFT": 86.7779,
-      "consumption": 284.2337,
-      "device_code": "D0001",
-      "device_name": "Chiller-1 75 TR"
-    },
-    {
-      "5RTR": 0,
-      "date": "2025-10-30",
-      "FFFFG": 8.5996,
-      "GENW1": 4.0773,
-      "FFFFG12": 0,
-      "SHIFT 2": 0,
-      "zone_name": "Utility",
-      "GENERAL134": 0,
-      "NIGHT SHIFT": 85.5574,
-      "consumption": 98.2343,
-      "device_code": "D0001",
-      "device_name": "Chiller-1 75 TR"
-    },
-    {
-      "5RTR": 16.8853,
-      "date": "2025-10-29",
-      "FFFFG": 8.7099,
-      "GENW1": 3.9192,
-      "FFFFG12": 18.6875,
-      "SHIFT 2": 80.7822,
-      "zone_name": "Utility",
-      "GENERAL134": 68.4717,
-      "NIGHT SHIFT": 86.7779,
-      "consumption": 284.2337,
-      "device_code": "D0001",
-      "device_name": "Chiller-1 75 TR"
-    },
-    {
-      "5RTR": 0,
-      "date": "2025-10-30",
-      "FFFFG": 8.5996,
-      "GENW1": 4.0773,
-      "FFFFG12": 0,
-      "SHIFT 2": 0,
-      "zone_name": "Utility",
-      "GENERAL134": 0,
-      "NIGHT SHIFT": 85.5574,
-      "consumption": 98.2343,
-      "device_code": "D0001",
-      "device_name": "Chiller-1 75 TR"
-    },
-    {
-      "5RTR": 16.8853,
-      "date": "2025-10-29",
-      "FFFFG": 8.7099,
-      "GENW1": 3.9192,
-      "FFFFG12": 18.6875,
-      "SHIFT 2": 80.7822,
-      "zone_name": "Utility",
-      "GENERAL134": 68.4717,
-      "NIGHT SHIFT": 86.7779,
-      "consumption": 284.2337,
-      "device_code": "D0001",
-      "device_name": "Chiller-1 75 TR"
-    },
-    {
-      "5RTR": 0,
-      "date": "2025-10-30",
-      "FFFFG": 8.5996,
-      "GENW1": 4.0773,
-      "FFFFG12": 0,
-      "SHIFT 2": 0,
-      "zone_name": "Utility",
-      "GENERAL134": 0,
-      "NIGHT SHIFT": 85.5574,
-      "consumption": 98.2343,
-      "device_code": "D0001",
-      "device_name": "Chiller-1 75 TR"
-    },
-    {
-      "5RTR": 16.8853,
-      "date": "2025-10-29",
-      "FFFFG": 8.7099,
-      "GENW1": 3.9192,
-      "FFFFG12": 18.6875,
-      "SHIFT 2": 80.7822,
-      "zone_name": "Utility",
-      "GENERAL134": 68.4717,
-      "NIGHT SHIFT": 86.7779,
-      "consumption": 284.2337,
-      "device_code": "D0001",
-      "device_name": "Chiller-1 75 TR"
-    },
-    {
-      "5RTR": 0,
-      "date": "2025-10-30",
-      "FFFFG": 8.5996,
-      "GENW1": 4.0773,
-      "FFFFG12": 0,
-      "SHIFT 2": 0,
-      "zone_name": "Utility",
-      "GENERAL134": 0,
-      "NIGHT SHIFT": 85.5574,
-      "consumption": 98.2343,
-      "device_code": "D0001",
-      "device_name": "Chiller-1 75 TR"
-    },
-    {
-      "5RTR": 16.8853,
-      "date": "2025-10-29",
-      "FFFFG": 8.7099,
-      "GENW1": 3.9192,
-      "FFFFG12": 18.6875,
-      "SHIFT 2": 80.7822,
-      "zone_name": "Utility",
-      "GENERAL134": 68.4717,
-      "NIGHT SHIFT": 86.7779,
-      "consumption": 284.2337,
-      "device_code": "D0001",
-      "device_name": "Chiller-1 75 TR"
-    },
-    {
-      "5RTR": 0,
-      "date": "2025-10-30",
-      "FFFFG": 8.5996,
-      "GENW1": 4.0773,
-      "FFFFG12": 0,
-      "SHIFT 2": 0,
-      "zone_name": "Utility",
-      "GENERAL134": 0,
-      "NIGHT SHIFT": 85.5574,
-      "consumption": 98.2343,
-      "device_code": "D0001",
-      "device_name": "Chiller-1 75 TR"
-    },
-    {
-      "5RTR": 16.8853,
-      "date": "2025-10-29",
-      "FFFFG": 8.7099,
-      "GENW1": 3.9192,
-      "FFFFG12": 18.6875,
-      "SHIFT 2": 80.7822,
-      "zone_name": "Utility",
-      "GENERAL134": 68.4717,
-      "NIGHT SHIFT": 86.7779,
-      "consumption": 284.2337,
-      "device_code": "D0001",
-      "device_name": "Chiller-1 75 TR"
-    },
-    {
-      "5RTR": 0,
-      "date": "2025-10-30",
-      "FFFFG": 8.5996,
-      "GENW1": 4.0773,
-      "FFFFG12": 0,
-      "SHIFT 2": 0,
-      "zone_name": "Utility",
-      "GENERAL134": 0,
-      "NIGHT SHIFT": 85.5574,
-      "consumption": 98.2343,
-      "device_code": "D0001",
-      "device_name": "Chiller-1 75 TR"
-    },
-    {
-      "5RTR": 16.8853,
-      "date": "2025-10-29",
-      "FFFFG": 8.7099,
-      "GENW1": 3.9192,
-      "FFFFG12": 18.6875,
-      "SHIFT 2": 80.7822,
-      "zone_name": "Utility",
-      "GENERAL134": 68.4717,
-      "NIGHT SHIFT": 86.7779,
-      "consumption": 284.2337,
-      "device_code": "D0001",
-      "device_name": "Chiller-1 75 TR"
-    },
-    {
-      "5RTR": 0,
-      "date": "2025-10-30",
-      "FFFFG": 8.5996,
-      "GENW1": 4.0773,
-      "FFFFG12": 0,
-      "SHIFT 2": 0,
-      "zone_name": "Utility",
-      "GENERAL134": 0,
-      "NIGHT SHIFT": 85.5574,
-      "consumption": 98.2343,
-      "device_code": "D0001",
-      "device_name": "Chiller-1 75 TR"
-    }
-  ]

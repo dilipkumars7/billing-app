@@ -27,10 +27,15 @@ const StyledButton = styled.button`
   ${baseItem}
 `;
 
-export default function IconButton({ icon: Icon, onClick }) {
+interface IconButtonProps {
+  icon: React.ComponentType; // The icon component
+  onClick?: React.MouseEventHandler<HTMLButtonElement>; // Optional click handler
+}
+
+export default function IconButton({ icon: Icon, onClick }: IconButtonProps) {
   return (
     <StyledButton onClick={onClick}>
-      {Icon && <Icon size="23" />}
+      <Icon />
     </StyledButton>
   );
 }
