@@ -34,6 +34,19 @@
   letter-spacing: 0.2px
 }
 
+@layer overrides {
+
+  h1, h2, h3, h4, h5, h6 {
+    text-wrap: normal !important;
+    font-size: revert !important;
+    font-weight: revert !important;
+  }
+
+  p, h1, h2, h3, h4, h5, h6 {
+    overflow-wrap: normal !important;
+  }
+}
+
 .hero_section{
   position: relative;
   height: auto;

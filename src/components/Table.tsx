@@ -1,5 +1,11 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import styled from "@emotion/styled";
+import { Button, Dropdown, MenuProps } from "antd";
+import { HiArrowNarrowUp, HiArrowNarrowDown } from "react-icons/hi";
+import { RxDotsHorizontal } from "react-icons/rx";
+import { IoClose } from "react-icons/io5";
+import { MdCheck } from "react-icons/md";
+import "../css/common.css";
 
 const TableContainer = styled.div`
   width: 100%;
@@ -28,6 +34,7 @@ const HeaderRow = styled.div<{ isScrolled: boolean }>`
   font-weight: bold;
   background-color: var(--ds-surface-sunken, #f7f8f9);
   z-index: 2;
+  user-select: none;
   box-shadow: ${(props) =>
     props.isScrolled ? "rgba(0, 0, 0, 0.09) 0px 3px 12px;" : "none"};
 `;
@@ -53,9 +60,15 @@ const Row = styled.div`
   }
 `;
 
-const Cell = styled.div<{ isHovered: boolean }>`
+const Cell = styled.div<{ isHovered: boolean; isHeaserCell: boolean }>`
+  ${(props) =>
+    props.isHeaserCell &&
+    `display: flex;
+    align-items: center;
+    background-color: #f8fbff;
+    `}
   position: relative;
-  padding: 10px;
+  padding: 9px;
   border-left: 1px solid #091E4224;
   border-bottom: 1px solid #091E4224;
   overflow: hidden;
@@ -83,46 +96,114 @@ const Resizer = styled.div`
   }
 `;
 
+const SortSpacer = styled.div<{ isHovered: boolean; isSorted: boolean }>`
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  /* 👇 Hide by default; show only when hovered or sorted */
+  visibility: ${(props) => (props.isHovered || props.isSorted ? "visible" : "hidden")};
+  transition: visibility 0.2s ease-in-out;
+`;
+
 interface TableProps {
   TableHeader: { headerName: string; defaultWidth: string; field: string }[];
   TableData: { [key: string]: any }[];
 }
 
 export default function Table({ TableHeader, TableData }: TableProps) {
+  const [originalData] = useState(TableData);
+  const [sortedData, setSortedData] = useState(TableData);
+
   const columnWidthsRef = useRef(
     TableHeader.map((item) => Number(item.defaultWidth) || 150)
   );
   const [columnWidths, setColumnWidths] = useState(columnWidthsRef.current);
   const [isScrolled, setIsScrolled] = useState(false);
   const [hoveredColumn, setHoveredColumn] = useState<number | null>(null);
+  const [sortColumn, setSortColumn] = useState<number | null>(null);
   const [headerLeft, setHeaderLeft] = useState(0);
+  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<"ASC" | "DESC" | null>(
+    null
+  );
 
   const scrollableBodyRef = useRef<HTMLDivElement>(null);
-  const headerWrapperRef = useRef<HTMLDivElement>(null);
+
+  // --- Initialize sort state from URL ---
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlSortBy = params.get("sortBy");
+    const urlDirection = params.get("direction") as "ASC" | "DESC" | null;
+
+    if (urlSortBy && urlDirection) {
+      setSortBy(urlSortBy);
+      setSortDirection(urlDirection);
+    }
+  }, []);
+
+  // --- Update URL when sort state changes ---
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    if (sortBy && sortDirection) {
+      params.set("sortBy", sortBy);
+      params.set("direction", sortDirection);
+    } else {
+      params.delete("sortBy");
+      params.delete("direction");
+    }
+
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.pushState(null, "", newUrl);
+  }, [sortBy, sortDirection]);
+
+  // --- Apply sorting logic ---
+  useEffect(() => {
+    if (!sortBy || !sortDirection) {
+      setSortedData(originalData);
+      return;
+    }
+
+    const sorted = [...originalData].sort((a, b) => {
+      const valA = a[sortBy];
+      const valB = b[sortBy];
+
+      if (valA == null) return 1;
+      if (valB == null) return -1;
+
+      if (typeof valA === "string" && typeof valB === "string") {
+        return sortDirection === "ASC"
+          ? valA.localeCompare(valB)
+          : valB.localeCompare(valA);
+      }
+
+      if (typeof valA === "number" && typeof valB === "number") {
+        return sortDirection === "ASC" ? valA - valB : valB - valA;
+      }
+
+      return 0;
+    });
+
+    setSortedData(sorted);
+  }, [sortBy, sortDirection, originalData]);
 
   // --- Scroll synchronization ---
   useEffect(() => {
     const body = scrollableBodyRef.current;
-
     if (!body) return;
 
     const handleBodyScroll = () => {
       const scrollLeft = body.scrollLeft;
       const scrollTop = body.scrollTop;
-      
       setIsScrolled(scrollTop > 0);
-      
-      // Move header left by negative scroll amount
-      requestAnimationFrame(() => {
-        setHeaderLeft(-scrollLeft);
-      });
+      requestAnimationFrame(() => setHeaderLeft(-scrollLeft));
     };
 
     body.addEventListener("scroll", handleBodyScroll, { passive: true });
-
-    return () => {
-      body.removeEventListener("scroll", handleBodyScroll);
-    };
+    return () => body.removeEventListener("scroll", handleBodyScroll);
   }, []);
 
   // --- Column resizing ---
@@ -131,7 +212,6 @@ export default function Table({ TableHeader, TableData }: TableProps) {
 
   const handleMouseMove = (event: MouseEvent) => {
     if (resizingIndex.current === null) return;
-
     requestAnimationFrame(() => {
       const newWidths = [...columnWidthsRef.current];
       const newWidth = Math.max(
@@ -158,28 +238,116 @@ export default function Table({ TableHeader, TableData }: TableProps) {
     document.addEventListener("mouseup", handleMouseUp);
   };
 
-  // Compute total width dynamically
+  // --- Sort handlers ---
+  const handleSort = (field: string, direction: "ASC" | "DESC") => {
+    setSortBy(field);
+    setSortDirection(direction);
+  };
+
+  const handleClearSort = () => {
+    setSortBy(null);
+    setSortDirection(null);
+  };
+
+  // --- Dropdown items ---
+  const generateMenuItems = (field: string): MenuProps["items"] => [
+    {
+      label: (
+        <div className="w-full flex items-center gap-2">
+          <HiArrowNarrowUp size={15} />
+          <span>Sort A - Z</span>
+        </div>
+      ),
+      key: "asc",
+      onClick: () => handleSort(field, "ASC"),
+      extra:
+        sortBy === field && sortDirection === "ASC" ? (
+          <MdCheck size={18} color="#0052CC" />
+        ) : undefined,
+    },
+    {
+      label: (
+        <div className="w-full flex items-center gap-2">
+          <HiArrowNarrowDown size={15} />
+          <span>Sort Z - A</span>
+        </div>
+      ),
+      key: "desc",
+      onClick: () => handleSort(field, "DESC"),
+      extra:
+        sortBy === field && sortDirection === "DESC" ? (
+          <MdCheck size={18} color="#0052CC" />
+        ) : undefined,
+    },
+    {
+      type: "divider",
+    },
+    {
+      label: (
+        <div className="w-full flex items-center gap-2">
+          <IoClose size={15} />
+          <span>Clear Sort</span>
+        </div>
+      ),
+      key: "clear",
+      onClick: handleClearSort,
+      danger: true,
+      disabled: sortBy !== field
+    },
+  ];
+
   const totalWidth = columnWidths.reduce((acc, w) => acc + w, 0);
 
   return (
     <TableContainer>
-      {/* Fixed Header with left positioning */}
       <HeaderScrollContainer>
-        <HeaderWrapper 
-          ref={headerWrapperRef}
-          style={{ 
-            left: `${headerLeft}px`,
-            width: `${totalWidth}px` 
-          }}
-        >
+        <HeaderWrapper style={{ left: `${headerLeft}px`, width: `${totalWidth}px` }}>
           <HeaderRow isScrolled={isScrolled}>
             {TableHeader.map((item, index) => (
               <Cell
                 key={index}
                 style={{ width: `${columnWidths[index]}px` }}
                 isHovered={hoveredColumn === index}
+                onMouseEnter={() => setSortColumn(index)}
+                onMouseLeave={() => setSortColumn(null)}
+                isHeaserCell={true}
               >
-                {item.headerName}
+                <div>{item.headerName}</div>
+                <SortSpacer isHovered={sortColumn === index} isSorted={sortBy === item.field}>
+                  {(sortColumn === index || sortBy === item.field) && (
+                    <Button
+                      type="text"
+                      style={{ padding: 0 }}
+                      onClick={() =>
+                        handleSort(
+                          item.field,
+                          sortBy === item.field && sortDirection === "ASC" ? "DESC" : "ASC"
+                        )
+                      }
+                      variant={`${sortBy === item.field ? "text" : "filled"}`}
+                      color={`${sortBy === item.field ? "primary" : "default"}`}
+                    >
+                      {sortBy === item.field ? (
+                        sortDirection === "ASC" ? (
+                          <HiArrowNarrowUp size={16} />
+                        ) : (
+                          <HiArrowNarrowDown size={16} />
+                        )
+                      ) : (
+                        <HiArrowNarrowUp size={16} className="opacity-50" />
+                      )}
+                    </Button>
+                  )}
+                  <Dropdown
+                    menu={{ items: generateMenuItems(item.field) }}
+                    trigger={["click"]}
+                    overlayStyle={{ width: "160px" }}
+                  >
+                    <Button type="text" style={{ padding: 0 }}>
+                      <RxDotsHorizontal size={16} />
+                    </Button>
+                  </Dropdown>
+                </SortSpacer>
                 <Resizer
                   onMouseDown={(event) => handleMouseDown(index, event)}
                   onMouseEnter={() => setHoveredColumn(index)}
@@ -191,16 +359,16 @@ export default function Table({ TableHeader, TableData }: TableProps) {
         </HeaderWrapper>
       </HeaderScrollContainer>
 
-      {/* Scrollable Body */}
       <ScrollableBody ref={scrollableBodyRef}>
         <BodyWrapper style={{ width: `${totalWidth}px` }}>
-          {TableData.map((item, rowIndex) => (
+          {sortedData.map((item, rowIndex) => (
             <Row key={rowIndex}>
               {TableHeader.map((header, colIndex) => (
                 <Cell
                   key={colIndex}
                   style={{ width: `${columnWidths[colIndex]}px` }}
                   isHovered={hoveredColumn === colIndex}
+                  isHeaserCell={false}
                 >
                   {item[header.field]}
                 </Cell>

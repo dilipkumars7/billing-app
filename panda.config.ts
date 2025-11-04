@@ -1,11 +1,11 @@
 import { defineConfig } from '@pandacss/dev'
 import { createPreset } from '@park-ui/panda-preset'
-import amber from '@park-ui/panda-preset/colors/amber'
-import sand from '@park-ui/panda-preset/colors/sand'
+import blue from '@park-ui/panda-preset/colors/blue'
+import slate from '@park-ui/panda-preset/colors/slate'
 
 export default defineConfig({
-  preflight: true,
-  presets: [createPreset({ accentColor: amber, grayColor: sand, radius: 'sm' })],
+  preflight: false,
+  presets: [createPreset({ accentColor: blue, grayColor: slate, radius: 'sm' })],
   include: ['./src/**/*.{js,jsx,ts,tsx,vue}'],
   jsxFramework: 'react', // or 'solid' or 'vue'
   outdir: 'styled-system',

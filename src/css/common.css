@@ -522,3 +522,9 @@
   inset-block-start: calc(var(--n_bnrM, 0px) + var(--n_tNvM, 0px));
   z-index: 2;
 }
+
+.ant-btn {
+  height: auto !important;
+  padding: 5px !important;
+  border-radius: 6px !important;
+}
