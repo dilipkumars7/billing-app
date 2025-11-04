@@ -314,41 +314,7 @@ export default function Table({ TableHeader, TableData }: TableProps) {
                 isHeaserCell={true}
               >
                 <div>{item.headerName}</div>
-                <SortSpacer isHovered={sortColumn === index} isSorted={sortBy === item.field}>
-                  {(sortColumn === index || sortBy === item.field) && (
-                    <Button
-                      type="text"
-                      style={{ padding: 0 }}
-                      onClick={() =>
-                        handleSort(
-                          item.field,
-                          sortBy === item.field && sortDirection === "ASC" ? "DESC" : "ASC"
-                        )
-                      }
-                      variant={`${sortBy === item.field ? "text" : "filled"}`}
-                      color={`${sortBy === item.field ? "primary" : "default"}`}
-                    >
-                      {sortBy === item.field ? (
-                        sortDirection === "ASC" ? (
-                          <HiArrowNarrowUp size={16} />
-                        ) : (
-                          <HiArrowNarrowDown size={16} />
-                        )
-                      ) : (
-                        <HiArrowNarrowUp size={16} className="opacity-50" />
-                      )}
-                    </Button>
-                  )}
-                  <Dropdown
-                    menu={{ items: generateMenuItems(item.field) }}
-                    trigger={["click"]}
-                    overlayStyle={{ width: "160px" }}
-                  >
-                    <Button type="text" style={{ padding: 0 }}>
-                      <RxDotsHorizontal size={16} />
-                    </Button>
-                  </Dropdown>
-                </SortSpacer>
+                {SortFunction(index, item)}
                 <Resizer
                   onMouseDown={(event) => handleMouseDown(index, event)}
                   onMouseEnter={() => setHoveredColumn(index)}
@@ -380,4 +346,40 @@ export default function Table({ TableHeader, TableData }: TableProps) {
       </ScrollableBody>
     </TableContainer>
   );
+
+  function SortFunction(index: number, item: { headerName: string; defaultWidth: string; field: string; }) {
+    return <SortSpacer isHovered={sortColumn === index} isSorted={sortBy === item.field}>
+      {(sortColumn === index || sortBy === item.field) && (
+        <Button
+          type="text"
+          style={{ padding: 0 }}
+          onClick={() => handleSort(
+            item.field,
+            sortBy === item.field && sortDirection === "ASC" ? "DESC" : "ASC"
+          )}
+          variant={`${sortBy === item.field ? "text" : "filled"}`}
+          color={`${sortBy === item.field ? "primary" : "default"}`}
+        >
+          {sortBy === item.field ? (
+            sortDirection === "ASC" ? (
+              <HiArrowNarrowUp size={16} />
+            ) : (
+              <HiArrowNarrowDown size={16} />
+            )
+          ) : (
+            <HiArrowNarrowUp size={16} className="opacity-50" />
+          )}
+        </Button>
+      )}
+      <Dropdown
+        menu={{ items: generateMenuItems(item.field) }}
+        trigger={["click"]}
+        overlayStyle={{ width: "160px" }}
+      >
+        <Button type="text" style={{ padding: 0 }}>
+          <RxDotsHorizontal size={16} />
+        </Button>
+      </Dropdown>
+    </SortSpacer>;
+  }
 }
