@@ -19,6 +19,7 @@
     "@tailwindcss/vite": "^4.1.13",
     "antd": "^5.28.0",
     "axios": "^1.13.1",
+    "backbone": "^1.6.1",
     "iconsax-reactjs": "^0.0.8",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

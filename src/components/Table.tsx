@@ -5,6 +5,7 @@ import { HiArrowNarrowUp, HiArrowNarrowDown } from "react-icons/hi";
 import { RxDotsHorizontal } from "react-icons/rx";
 import { IoClose } from "react-icons/io5";
 import { MdCheck } from "react-icons/md";
+import { Editable } from './ui/editable';
 import "../css/common.css";
 
 const TableContainer = styled.div`
@@ -110,11 +111,12 @@ const SortSpacer = styled.div<{ isHovered: boolean; isSorted: boolean }>`
 `;
 
 interface TableProps {
-  TableHeader: { headerName: string; defaultWidth: string; field: string }[];
+  TableHeader: { headerName: string; defaultWidth: string; field: string; type?: "text" | "number" | "date" | "select" | "dropdown"; options?: { [key: string]: any }[]; }[];
   TableData: { [key: string]: any }[];
+  onRowChange?: (rowIndex: number, updatedRow: Record<string, any>) => void
 }
 
-export default function Table({ TableHeader, TableData }: TableProps) {
+export default function Table({ TableHeader, TableData, onRowChange }: TableProps) {
   const [originalData] = useState(TableData);
   const [sortedData, setSortedData] = useState(TableData);
 
@@ -239,6 +241,21 @@ export default function Table({ TableHeader, TableData }: TableProps) {
     document.addEventListener("mouseup", handleMouseUp);
   };
 
+  const handleCellValueChange = (rowIndex: number, field: string, newValue: any) => {
+    setSortedData((prev) => {
+      const updatedData = prev.map((row, i) =>
+        i === rowIndex ? { ...row, [field]: newValue } : row
+      );
+
+      // 🟢 Emit the full updated row to parent
+      if (onRowChange) {
+        onRowChange(rowIndex, updatedData[rowIndex]);
+      }
+
+      return updatedData;
+    });
+  };
+
   // --- Sort handlers ---
   const handleSort = (field: string, direction: "ASC" | "DESC") => {
     setSortBy(field);
@@ -337,7 +354,14 @@ export default function Table({ TableHeader, TableData }: TableProps) {
                   isHovered={hoveredColumn === colIndex}
                   isHeaserCell={false}
                 >
-                  {item[header.field]}
+                  <EditableCell
+                    value={item[header.field]}
+                    rowIndex={rowIndex}
+                    field={header.field}
+                    type={header.type || "text"} // 👈 New property in TableHeader
+                    options={header.options}     // 👈 For select/dropdown fields
+                    onValueChange={handleCellValueChange}
+                  />
                 </Cell>
               ))}
             </Row>
@@ -382,4 +406,126 @@ export default function Table({ TableHeader, TableData }: TableProps) {
       </Dropdown>
     </SortSpacer>;
   }
+}
+
+
+function EditableCell({
+  value,
+  rowIndex,
+  field,
+  type,
+  options,
+  onValueChange,
+}: {
+  value: any;
+  rowIndex: number;
+  field: string;
+  type: "text" | "number" | "date" | "select" | "dropdown";
+  options?: { [key: string]: any }[] | string[];
+  onValueChange: (rowIndex: number, field: string, newValue: any) => void;
+}) {
+  const [localValue, setLocalValue] = useState(
+    value !== null && value !== undefined ? String(value) : ""
+  );
+
+  useEffect(() => {
+    setLocalValue(value !== null && value !== undefined ? String(value) : "");
+  }, [value]);
+
+  const handleChange = (newVal: any) => {
+    setLocalValue(newVal);
+    let parsedValue: any = newVal;
+    if (type === "number") parsedValue = newVal === "" ? null : Number(newVal);
+    if (type === "date") parsedValue = newVal ? new Date(newVal) : null;
+    onValueChange(rowIndex, field, parsedValue);
+  };
+
+  // ✅ Format date for display
+  const formatDate = (val: any) => {
+    if (!val) return "—";
+    const dateObj = new Date(val);
+    if (isNaN(dateObj.getTime())) return val; // invalid date, return raw
+    return dateObj.toISOString().split("T")[0]; // YYYY-MM-DD
+  };
+
+  return (
+    <Editable.Root
+      value={localValue ?? ""}
+      onValueChange={(e) => handleChange(e.value ?? "")}
+      placeholder="Click to edit"
+      autoFocus
+      selectOnFocus
+      className="w-full"
+    >
+      <Editable.Area className="flex items-center w-full">
+        {/* Preview Mode */}
+        <Editable.Preview className="truncate w-full cursor-text text-[13px] text-gray-800">
+          {type === "date" ? formatDate(value) : localValue?.toString() || "—"}
+        </Editable.Preview>
+
+        {/* Edit Mode */}
+        <Editable.Input asChild>
+          {(() => {
+            switch (type) {
+              case "number":
+                return (
+                  <input
+                    type="number"
+                    autoFocus
+                    defaultValue=""
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => handleChange(e.target.value)}
+                    className="w-full border border-blue-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                );
+              case "date":
+                return (
+                  <input
+                    type="date"
+                    autoFocus
+                    defaultValue=""
+                    onChange={(e) => handleChange(e.target.value)}
+                    className="w-full border border-blue-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                );
+              case "select":
+              case "dropdown":
+                return (
+                  <select
+                    autoFocus
+                    defaultValue=""
+                    onChange={(e) => handleChange(e.target.value)}
+                    className="w-full border border-blue-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  >
+                    <option value="">Select</option>
+                    {options?.map((opt: any) => {
+                      const label =
+                        typeof opt === "string" ? opt : opt.label ?? opt.value;
+                      const val =
+                        typeof opt === "string" ? opt : opt.value ?? opt.label;
+                      return (
+                        <option key={val} value={val}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                );
+              default:
+                return (
+                  <input
+                    type="text"
+                    autoFocus
+                    defaultValue=""
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => handleChange(e.target.value)}
+                    className="w-full border border-blue-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                );
+            }
+          })()}
+        </Editable.Input>
+      </Editable.Area>
+    </Editable.Root>
+  );
 }
