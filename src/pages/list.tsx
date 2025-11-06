@@ -1,70 +1,77 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import Table from "../components/Table";
+import { useApi } from "../hooks/useApi";
+import { PATH } from "../constants/app.constant";
 
-export default function MovieList() {
-  const [TableHeader, setTableHeader] = useState<any[]>([]);
-  const [TableData, setTableData] = useState<any[]>([]);
+interface Movie {
+  title: string;
+  release_date: string;
+  original_language: string;
+  popularity: number;
+  vote_average: number;
+  vote_count: number;
+  overview: string;
+}
 
-  const API_URL =
-    "https://api.themoviedb.org/3/discover/movie?api_key=ecd1484bdf4c4701a8e2c072903553ee&language=en-US&sort_by=popularity.desc&include_adult=false&include_video=false";
+const List: React.FC = () => {
+  const { data, loading, error } = useApi<{ results: Movie[] }>(PATH.GET_MOVIE_DATA);
+  const [tableHeader, setTableHeader] = useState<any[]>([]);
+  const [tableData, setTableData] = useState<Movie[]>([]);
 
   useEffect(() => {
-    fetch(API_URL)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.results && data.results.length > 0) {
-          // ✅ Keep only desired fields
-          const desiredFields = [
-            "title",
-            "release_date",
-            "original_language",
-            "popularity",
-            "vote_average",
-            "vote_count",
-            "overview",
-          ];
+    if (data?.results?.length) {
+      const desiredFields: (keyof Movie)[] = [
+        "title",
+        "release_date",
+        "original_language",
+        "popularity",
+        "vote_average",
+        "vote_count",
+        "overview",
+      ];
 
-          const getWidth = (key: string) => {
-            const baseWidth = 150;
-            const extraPerChar = 10; // adjust for longer names
-            const minWidth = 120;
-            const maxWidth = 400;
-            const width = baseWidth + key.length * extraPerChar;
-            return Math.min(Math.max(width, minWidth), maxWidth); // clamp between min and max
-          };
+      const getWidth = (key: string) => {
+        const baseWidth = 150;
+        const extraPerChar = 10;
+        const minWidth = 120;
+        const maxWidth = 400;
+        const width = baseWidth + key.length * extraPerChar;
+        return Math.min(Math.max(width, minWidth), maxWidth);
+      };
 
-          // ✅ Generate headers only for desired fields
-          const headers = desiredFields.map((key) => ({
-            headerName: key.replace(/_/g, " ").toUpperCase(),
-            field: key,
-            defaultWidth: getWidth(key),
-          }));
+      const headers = desiredFields.map((key) => ({
+        headerName: key.replace(/_/g, " ").toUpperCase(),
+        field: key,
+        defaultWidth: getWidth(key),
+      }));
 
-          // ✅ Filter data to include only desired fields
-          const filteredData = data.results.map((movie: any) => {
-            const filtered: Record<string, any> = {};
-            desiredFields.forEach((field) => {
-              filtered[field] = movie[field];
-            });
-            return filtered;
-          });
+      const filteredData = data.results.map((movie) => {
+        const filtered: Partial<Movie> = {};
+        desiredFields.forEach((field) => {
+          filtered[field] = movie[field];
+        });
+        return filtered as Movie;
+      });
 
-          setTableHeader(headers);
-          setTableData(filteredData);
-        }
-      })
-      .catch((err) => console.error("API Error:", err));
-  }, []);
+      setTableHeader(headers);
+      setTableData(filteredData);
+    }
+  }, [data]);
+
+  if (loading) return <p>Loading movies...</p>;
+  if (error) return <p style={{ color: "red" }}>Error: {error}</p>;
 
   return (
     <div>
       <h3>🎬 Popular Movies (From TMDB API)</h3>
 
-      {TableHeader.length > 0 ? (
-        <Table TableHeader={TableHeader} TableData={TableData} />
+      {tableHeader.length > 0 && tableData.length > 0 ? (
+        <Table TableHeader={tableHeader} TableData={tableData} />
       ) : (
-        <p>Loading movies...</p>
+        <p>No movies found.</p>
       )}
     </div>
   );
-}
+};
+
+export default List;
