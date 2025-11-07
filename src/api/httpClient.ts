@@ -1,9 +1,9 @@
 import axios, { AxiosInstance, } from 'axios';
-// import { getAuthToken, removeAuthToken } from '../utils/tokenManager';
+import { getAuthToken } from '../utils/tokenManager';
 
 // Create a single Axios instance
 const httpClient: AxiosInstance = axios.create({
-  baseURL: 'https://api.themoviedb.org/',
+  baseURL: 'http://localhost:8080/',
   timeout: 15000,
   headers: {
     "Content-Type": "application/json;charset=utf-8",
@@ -20,22 +20,19 @@ httpClient.interceptors.response.use(
 );
 
 // // 🔹 Request Interceptor
-// httpClient.interceptors.request.use(
-//   (config: AxiosRequestConfig) => {
-//     const token = getAuthToken();
-//     if (token && config.headers) {
-//       config.headers.Authorization = `Bearer ${token}`;
-//     }
-
-//     // Example: Add correlation ID or custom headers
-//     config.headers['X-Request-Source'] = 'react-vite-client';
-//     return config;
-//   },
-//   (error: AxiosError) => {
-//     console.error('[Request Error]:', error);
-//     return Promise.reject(error);
-//   }
-// );
+httpClient.interceptors.request.use(
+  (config: AxiosRequestConfig) => {
+    const token = getAuthToken();
+    if (token && config.headers) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error: AxiosError) => {
+    console.error('[Request Error]:', error);
+    return Promise.reject(error);
+  }
+);
 
 // // 🔹 Response Interceptor
 // httpClient.interceptors.response.use(

@@ -1,35 +1,90 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { ApiService } from '../api/apiService';
 
-interface UseApiResponse<T> {
-  data: T | null;
-  loading: boolean;
-  error: string | null;
+// 🔹 Type for supported HTTP methods
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+
+// 🔹 Hook configuration options
+interface UseApiOptions<TRequest = any> {
+  method?: HttpMethod;
+  params?: Record<string, any>;
+  body?: TRequest;
+  autoFetch?: boolean; // optional — allows deferring fetch until triggered
 }
 
-export const useApi = <T>(url: string, params?: any): UseApiResponse<T> => {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+// 🔹 Hook response type
+interface UseApiResponse<TResponse> {
+  data: TResponse | null;
+  loading: boolean;
+  error: string | null;
+  refetch: () => void; // allows manual re-triggering of fetch
+}
 
-  useEffect(() => {
+// ✅ Generic hook that supports all CRUD methods
+export function useApi<TResponse, TRequest = any>(
+  url: string,
+  options: UseApiOptions<TRequest> = {}
+): UseApiResponse<TResponse> {
+  const {
+    method = 'GET',
+    params,
+    body,
+    autoFetch = true,
+  } = options;
+
+  const [data, setData] = useState<TResponse | null>(null);
+  const [loading, setLoading] = useState<boolean>(autoFetch);
+  const [error, setError] = useState<string | null>(null);
+  const [trigger, setTrigger] = useState<number>(0); // used for refetching
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
     let isMounted = true;
 
-    ApiService.get<T>(url, params)
-      .then((response) => {
-        if (isMounted) setData(response);
-      })
-      .catch((err) => {
-        if (isMounted) setError(err.message || 'An error occurred');
-      })
-      .finally(() => {
-        if (isMounted) setLoading(false);
-      });
+    try {
+      let response: TResponse;
+
+      switch (method) {
+        case 'POST':
+          response = await ApiService.post<TResponse>(url, body);
+          break;
+        case 'PUT':
+          response = await ApiService.put<TResponse>(url, body);
+          break;
+        case 'DELETE':
+          response = await ApiService.delete<TResponse>(url);
+          break;
+        case 'GET':
+        default:
+          response = await ApiService.get<TResponse>(url, params);
+          break;
+      }
+
+      if (isMounted) {
+        setData(response);
+      }
+    } catch (err: any) {
+      if (isMounted) {
+        setError(err.message || 'An unexpected error occurred.');
+      }
+    } finally {
+      if (isMounted) setLoading(false);
+    }
 
     return () => {
       isMounted = false;
     };
-  }, [url, JSON.stringify(params)]);
+  }, [url, method, JSON.stringify(params), JSON.stringify(body), trigger]);
 
-  return { data, loading, error };
-};
+  // Auto fetch when component mounts or dependencies change
+  useEffect(() => {
+    if (autoFetch) fetchData();
+  }, [fetchData, autoFetch]);
+
+  // 🔹 Allows manual re-fetching
+  const refetch = () => setTrigger((prev) => prev + 1);
+
+  return { data, loading, error, refetch };
+}
