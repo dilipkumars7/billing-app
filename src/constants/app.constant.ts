@@ -2,7 +2,7 @@
 
 export const PATH = {
 
-  login: 'login',
+  LOGIN: 'api/users/login',
 
 
   GET_ITEMS_DATA:'api/items'

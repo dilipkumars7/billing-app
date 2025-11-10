@@ -1,5 +1,7 @@
+import Cookies from "js-cookie";
+
 export const getAuthToken = (): string | null => {
-  return localStorage.getItem('authToken');
+  return Cookies.get('authToken');
 };
 
 export const setAuthToken = (token: string): void => {

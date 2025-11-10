@@ -1,16 +1,21 @@
-// src/components/ProtectedRoute.tsx
-import React from "react";
-import { Navigate } from "react-router";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { useAuthContext } from "./AuthProvider";
 
-import { isAuthenticated } from "./auth";
+export default function ProtectedRoute() {
+  const { user, isLoading } = useAuthContext();
+  const location = useLocation();
 
-interface Props {
-  children: React.ReactNode;
-}
-
-export default function ProtectedRoute({ children }: Props) {
-  if (!isAuthenticated()) {
-    return <Navigate to="/login" replace />;
+  // ✅ Wait for AuthProvider to finish checking
+  if (isLoading) {
+    return <div>Loading authentication...</div>;
   }
-  return <>{children}</>;
+
+  // ✅ Redirect unauthenticated users
+  if (!user) {
+    console.log("🔒 Not authenticated, redirecting to /login");
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  // ✅ Authenticated → render route
+  return <Outlet />;
 }
