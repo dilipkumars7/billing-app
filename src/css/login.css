@@ -140,3 +140,49 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.react-tel-input .special-label {
+    position: absolute;
+    z-index: 1;
+    top: -12px !important;
+    left: 37px !important;
+    display: block;
+    background: white;
+    padding: 0 5px;
+    font-size: 14px !important;
+    white-space: nowrap;
+}
+
+
+:where(.css-dev-only-do-not-override-1ygoyzi).ant-steps .ant-steps-item-container {
+    outline: none;
+    display: flex;
+    align-items: center;
+}
+
+:where(.css-dev-only-do-not-override-1ygoyzi).ant-steps .ant-steps-item-icon .ant-steps-icon {
+    position: relative;
+    top: -2px;
+    color: #0052cc;
+    line-height: 1;
+}
+
+:where(.css-dev-only-do-not-override-1ygoyzi).ant-steps .ant-steps-item-title {
+    position: relative;
+    display: inline-block;
+    padding-inline-end: 11px;
+    color: rgba(0, 0, 0, 0.88);
+    font-size: 13px;
+    line-height: unset;
+}
+
+:where(.css-dev-only-do-not-override-1ygoyzi).ant-steps .ant-steps-item-icon {
+    width: 22px;
+    height: 22px;
+    font-size: 12px;
+    line-height: 24px;
+}
+
+:where(.css-dev-only-do-not-override-1ygoyzi).ant-steps {
+  display: unset;
+}

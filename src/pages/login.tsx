@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo  } from "react";
+import { useEffect, useRef, useState  } from "react";
 import { gsap } from "gsap";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -13,20 +13,38 @@ import { PATH } from "../constants/app.constant";
 import { useApi } from "../hooks/useApi";
 import { CookieService } from "../store/Cookie";
 import { useNotification } from '../components/provider/NotificationProvider';
+import PhoneInput from 'react-phone-input-2'
+import 'react-phone-input-2/lib/material.css'
+import Register from "./register";
 
 
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const phoneRegex = /^\+?[1-9]\d{6,14}$/;
 
 const baseSchema = z.object({
-  email: z.string().min(1, "Email is required").email("Invalid email format"),
+  email: z
+    .string()
+    .trim()
+    .min(1, "Email or phone number is required")
+    .refine(
+      (value) => emailRegex.test(value) || phoneRegex.test(value),
+      (value) => {
+        if (!value || value.trim() === "") {
+          return { message: "Email or phone number is required" };
+        }
+        if (value.includes("@")) {
+          return { message: "Please enter a valid email address (e.g., user@example.com)" };
+        }
+        if (/^\d+$/.test(value)) {
+          return { message: "Please enter a valid phone number (10 digits minimum)" };
+        }
+        return { message: "Please enter a valid email address or phone number" };
+      }
+    ),
   password: z.string().min(1, "Password is required"),
 });
 
-const schema = baseSchema.required({
-  email: true,
-  password: true,
-});
-
-type FormData = z.infer<typeof schema>;
+type FormData = z.infer<typeof baseSchema>;
 
 export default function Login() {
 
@@ -35,14 +53,46 @@ export default function Login() {
   const progressContent = useRef<HTMLSpanElement | null>(null);
   const notificationApi = useNotification();
 
+  const [inputType, setInputType] = useState<"email" | "phone">("email");
+  const [inputValue, setInputValue] = useState("");
+  const [isRegister, setIsRegister] = useState(false); 
+
   const { data, loading, error, refetch } = useApi<any>(
     PATH.LOGIN,
     { method: 'POST', autoFetch: false }
   );
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInputValue(value);
+    setValue("email", value, { shouldValidate: true });
+
+    // switch modes dynamically
+    if (/^\d+$/.test(value) && value.length > 0) {
+      setInputType("phone");
+    } else {
+      setInputType("email");
+    }
+  };
+
+  const handlePhoneChange = (value: string) => {
+    const numericValue = value.replace(/^91/, "");
+
+    if (!numericValue || numericValue.trim() === "") {
+      setInputType("email");
+      setInputValue("");
+      setValue("email", "", { shouldValidate: true });
+      return;
+    }
+
+    setInputType("phone");
+    setInputValue(value);
+    setValue("email", value, { shouldValidate: true }); // keep RHF synced
+  };
+
+
   useEffect(() => {
     if (data) {
-      console.log('✅ Login success:', data);
       CookieService.set('user', data.userId);
       CookieService.set('authToken', data.authToken);
       CookieService.set('email', data.userEmail);
@@ -59,7 +109,6 @@ export default function Login() {
       }, 1000);
     }
     if (error) {
-      console.error('❌ Login failed:', error.message);
       notificationApi.error({
         message: error.error,
         description: `${error?.message || 'Login failed. Please try again.'}`,
@@ -107,24 +156,36 @@ export default function Login() {
     }
   };
 
-  const { register, handleSubmit, formState: {errors} } = useForm<FormData>({
-    resolver: zodResolver(schema), 
-    mode: "onChange"
+  const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
+    resolver: zodResolver(baseSchema),
+    mode: "onChange",
   });
 
   const navigate = useNavigate();
 
   const onSubmit = (formData: FormData) => {
-    // document.cookie = `email=${data.email}; path=/; SameSite=Lax`;
-    // document.cookie = `user=admin; path=/; SameSite=Lax`;
-    
-    console.log("Form Submitted:", FormData);
-    refetch({
-      body: {
-        email: formData.email,
-        password: formData.password,
-      },
-    });
+    const finalInput = inputValue || formData.email.trim();
+
+    const isPhone = phoneRegex.test(finalInput);
+    const isEmail = emailRegex.test(finalInput);
+
+    // extra runtime guard
+    if (!isPhone && !isEmail) {
+      notificationApi.error({
+        message: "Invalid Input",
+        description: "Please enter a valid email address or phone number.",
+        showProgress: true,
+        pauseOnHover: true,
+      });
+      return;
+    }
+
+    const body = isPhone
+      ? { phone: finalInput.replace(/^91/, ""), password: formData.password }
+      : { email: finalInput, password: formData.password };
+
+    console.log("📤 Sending request:", body);
+    refetch({ body });
   };
 
   const EmailIcon = (
@@ -138,7 +199,7 @@ export default function Login() {
       <path d="M4.2678 18.8447C4.49268 20.515 5.87612 21.8235 7.55965 21.9009C8.97626 21.966 10.4153 22 12 22C13.5847 22 15.0237 21.966 16.4403 21.9009C18.1239 21.8235 19.5073 20.515 19.7322 18.8447C19.8789 17.7547 20 16.6376 20 15.5C20 14.3624 19.8789 13.2453 19.7322 12.1553C19.5073 10.485 18.1239 9.17649 16.4403 9.09909C15.0237 9.03397 13.5847 9 12 9C10.4153 9 8.97626 9.03397 7.55965 9.09909C5.87612 9.17649 4.49268 10.485 4.2678 12.1553C4.12104 13.2453 3.99999 14.3624 3.99999 15.5C3.99999 16.6376 4.12104 17.7547 4.2678 18.8447Z" stroke="currentColor" strokeWidth="1.5" />
       <path d="M7.5 9V6.5C7.5 4.01472 9.51472 2 12 2C14.4853 2 16.5 4.01472 16.5 6.5V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
-  )
+  );
 
   const [showPassword, setShowPassword] = useState(false);
 
@@ -146,6 +207,35 @@ export default function Login() {
     setShowPassword((prev) => !prev);
   };
 
+  const handleSignUpClick = () => {
+    setIsRegister(true);
+    const url = new URL(window.location.href);
+    url.searchParams.set("app", "register");
+    window.history.pushState({}, "", url);
+  };
+
+  const handleLoginClick = () => {
+    setIsRegister(false);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("app"); // remove the "app" query param
+    window.history.pushState({}, "", url);
+  };
+
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const params = new URLSearchParams(window.location.search);
+      const appParam = params.get("app");
+      setIsRegister(appParam === "register");
+    };
+
+    // Run initially
+    handleUrlChange();
+
+    // Listen for back/forward navigation
+    window.addEventListener("popstate", handleUrlChange);
+
+    return () => window.removeEventListener("popstate", handleUrlChange);
+  }, []);
   
   return (
     <>
@@ -225,45 +315,87 @@ export default function Login() {
 
         </div>
 
-        <div className="h-full w-full flex items-center justify-center flex-col">
-          <div className="mb-10 w-full text-center">
-            <h1 className="text-4xl font-bold mb-2">Welcome Back</h1>
-            <p className="text-gray-600">Please login to your account</p>
-          </div>
-          <form className={`w-[85%] flex items-center justify-center flex-col gap-10 relative p-10`} onSubmit={handleSubmit(onSubmit)}>
-            <Input type="email" label="Email" variant="login" {...register("email")} error={errors.email?.message} icon={EmailIcon}></Input>
-            <Input type={showPassword ? "text" : "password"} label="Password" variant="login" {...register("password")} error={errors.password?.message} icon={PassIcon}></Input>
-            <span onClick={togglePasswordVisibility} className="absolute right-13 top-[51%] transform -translate-y-1/2 cursor-pointer">
-            {showPassword ? (
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={24} height={24} color={"#000000"} fill={"none"}>
-                <path d="M22 8C22 8 18 14 12 14C6 14 2 8 2 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                <path d="M15 13.5L16.5 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M20 11L22 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M2 13L4 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M9 13.5L7.5 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={24} height={24} color={"#000000"} fill={"none"}>
-                <path d="M21.544 11.045C21.848 11.4713 22 11.6845 22 12C22 12.3155 21.848 12.5287 21.544 12.955C20.1779 14.8706 16.6892 19 12 19C7.31078 19 3.8221 14.8706 2.45604 12.955C2.15201 12.5287 2 12.3155 2 12C2 11.6845 2.15201 11.4713 2.45604 11.045C3.8221 9.12944 7.31078 5 12 5C16.6892 5 20.1779 9.12944 21.544 11.045Z" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15C13.6569 15 15 13.6569 15 12Z" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
-            )}
-            </span>
-            <button type="submit" className={`button-65`} role="button">
-              {
-                  loading ? (
-                    <svg aria-hidden="true" role="status" className="inline mt-2 w-6 h-6 text-white animate-spin" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z" fill="#E5E7EB"></path>
-                      <path d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z" fill="currentColor"></path>
-                    </svg>
-                  )  : 'Login'
-                }
-            </button>
-          </form>
-        </div>
+        {!isRegister ? LoginFormFunction() : <Register isRegister={isRegister} setIsRegister={setIsRegister} />}
 
       </div>
     </>
   );
+
+  function LoginFormFunction() {
+    return <div className="h-full w-full flex items-center justify-center flex-col">
+      <div className="mb-10 w-full text-center">
+        <h1 className="text-4xl font-bold mb-2">Welcome Back</h1>
+        <p className="text-gray-600">Please login to your account</p>
+      </div>
+      <form className={`w-[85%] flex items-center justify-center flex-col gap-10 relative p-10`} onSubmit={handleSubmit(onSubmit)} autoComplete="off">
+        {/* <Input type="email" label="Email" variant="login" {...register("email")} error={errors.email?.message} icon={EmailIcon}></Input> */}
+        {inputType === "phone" ? (
+          <div className="w-full">
+            <PhoneInput
+              country={"in"} // Default to India
+              onlyCountries={["in"]}
+              value={inputValue}
+              onChange={handlePhoneChange}
+              disableDropdown={true}
+              placeholder="Enter phone number"
+              specialLabel="Email or Phone"
+              inputProps={{
+                name: "email",
+                autoComplete: "off",
+                autofocus: true,
+              }}
+              inputStyle={{
+                width: "100%",
+                borderRadius: "1px",
+                fontSize: "15px",
+                padding: "12px 55px",
+              }} />
+          </div>
+        ) : (
+          <Input
+            type="text"
+            label="Email or Phone"
+            variant="login"
+            {...register("email")}
+            onChange={handleInputChange}
+            value={inputValue}
+            error={errors.email?.message}
+            icon={EmailIcon} />
+        )}
+
+        <Input type={showPassword ? "text" : "password"} label="Password" variant="login" {...register("password")} error={errors.password?.message} icon={PassIcon}></Input>
+        <span onClick={togglePasswordVisibility} className="absolute right-13 top-[48%] transform -translate-y-1/2 cursor-pointer">
+          {showPassword ? (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={24} height={24} color={"#000000"} fill={"none"}>
+              <path d="M22 8C22 8 18 14 12 14C6 14 2 8 2 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              <path d="M15 13.5L16.5 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M20 11L22 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2 13L4 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M9 13.5L7.5 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width={24} height={24} color={"#000000"} fill={"none"}>
+              <path d="M21.544 11.045C21.848 11.4713 22 11.6845 22 12C22 12.3155 21.848 12.5287 21.544 12.955C20.1779 14.8706 16.6892 19 12 19C7.31078 19 3.8221 14.8706 2.45604 12.955C2.15201 12.5287 2 12.3155 2 12C2 11.6845 2.15201 11.4713 2.45604 11.045C3.8221 9.12944 7.31078 5 12 5C16.6892 5 20.1779 9.12944 21.544 11.045Z" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15C13.6569 15 15 13.6569 15 12Z" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+          )}
+        </span>
+        <span className='absolute top-[60%] right-10 text-[12.5px] underline text-[var(--ds-text-accent-blue)] cursor-pointer select-none'>Forgot Password?</span>
+        <button type="submit" className={`button-65 mt-5`} role="button">
+          {loading ? (
+            <svg aria-hidden="true" role="status" className="inline mt-2 w-6 h-6 text-white animate-spin" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z" fill="#E5E7EB"></path>
+              <path d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z" fill="currentColor"></path>
+            </svg>
+          ) : 'Login'}
+        </button>
+      </form>
+      <div className='mt-6 flex items-center justify-center gap-2'>
+        <span>Create Account</span><span onClick={handleSignUpClick} className='text-[14px] underline text-[var(--ds-text-accent-blue)] cursor-pointer select-none'>Sign up</span>
+      </div>
+    </div>;
+  }
+
+  
 }
 

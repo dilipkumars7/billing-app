@@ -15,7 +15,7 @@ const SdkInput = forwardRef<HTMLInputElement, InputProps>(
     if (variant === "login") {
       return (
         <div className="input-wrapper">
-          <input className={`${inputClassName}`} type={type} placeholder=" " ref={ref} {...rest} />
+          <input className={`${inputClassName}`} type={type} placeholder=" " ref={ref} {...rest}  />
           <span className={`placeholder ${error ? "text-red-500" : ""}`}>{label}</span>
           {icon && <span className="inputicon">{icon}</span>}
 

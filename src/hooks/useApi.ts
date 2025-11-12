@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { ApiService } from '../api/apiService';
+import { useEffect, useState, useCallback, useRef } from "react";
+import { ApiService } from "../api/apiService";
 
-type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 
 interface UseApiOptions<TRequest = any> {
   method?: HttpMethod;
@@ -10,19 +10,26 @@ interface UseApiOptions<TRequest = any> {
   autoFetch?: boolean;
 }
 
+interface RefetchOptions<TRequest = any> extends Partial<UseApiOptions<TRequest>> {
+  /** optional path segment to append to base URL */
+  path?: string;
+  /** optional complete override of the URL */
+  urlOverride?: string;
+}
+
 interface UseApiResponse<TResponse, TRequest> {
   data: TResponse | null;
   loading: boolean;
   error: string | null;
-  refetch: (overrideOptions?: Partial<UseApiOptions<TRequest>>) => void;
+  refetch: (overrideOptions?: RefetchOptions<TRequest>) => Promise<TResponse | null>;
 }
 
 export function useApi<TResponse, TRequest = any>(
-  url: string,
+  baseUrl: string,
   options: UseApiOptions<TRequest> = {}
 ): UseApiResponse<TResponse, TRequest> {
   const {
-    method = 'GET',
+    method = "GET",
     params = undefined,
     body = undefined,
     autoFetch = true,
@@ -32,7 +39,6 @@ export function useApi<TResponse, TRequest = any>(
   const [loading, setLoading] = useState<boolean>(autoFetch);
   const [error, setError] = useState<string | null>(null);
 
-  // Keep the latest options in a ref (so they’re always available)
   const latestOptions = useRef<UseApiOptions<TRequest>>({
     method,
     params,
@@ -41,54 +47,70 @@ export function useApi<TResponse, TRequest = any>(
 
   const [shouldFetch, setShouldFetch] = useState(false);
 
-  // ✅ Actual API request function
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  // ✅ Core API request logic
+  const fetchData = useCallback(
+    async (customUrl?: string): Promise<TResponse | null> => {
+      setLoading(true);
+      setError(null);
 
-    const { method, params, body } = latestOptions.current;
+      const { method, params, body } = latestOptions.current;
+      const finalUrl = customUrl || baseUrl;
 
-    try {
-      let response: TResponse;
+      try {
+        let response: TResponse;
 
-      switch (method) {
-        case 'POST':
-          response = await ApiService.post<TResponse>(url, body);
-          break;
-        case 'PUT':
-          response = await ApiService.put<TResponse>(url, body);
-          break;
-        case 'DELETE':
-          response = await ApiService.delete<TResponse>(url);
-          break;
-        case 'GET':
-        default:
-          response = await ApiService.get<TResponse>(url, params);
-          break;
+        switch (method) {
+          case "POST":
+            response = await ApiService.post<TResponse>(finalUrl, body);
+            break;
+          case "PUT":
+            response = await ApiService.put<TResponse>(finalUrl, body);
+            break;
+          case "DELETE":
+            response = await ApiService.delete<TResponse>(finalUrl);
+            break;
+          case "GET":
+          default:
+            response = await ApiService.get<TResponse>(finalUrl, params);
+            break;
+        }
+
+        setData(response);
+        return response;
+      } catch (err: any) {
+        setError(
+          err?.response?.data || err || 'Something went wrong.'
+        );
+        return null;
+      } finally {
+        setLoading(false);
       }
+    },
+    [baseUrl]
+  );
 
-      setData(response);
-    } catch (err: any) {
-      setError(
-        err?.response?.data || err || 'Something went wrong.'
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [url]);
-
-  // ✅ Trigger fetch when requested
+  // ✅ Auto-fetch if required
   useEffect(() => {
     if (autoFetch || shouldFetch) {
       fetchData();
-      setShouldFetch(false); // reset flag after sending request
+      setShouldFetch(false);
     }
   }, [fetchData, autoFetch, shouldFetch]);
 
-  // ✅ Trigger manually with new body/params
-  const refetch = (overrideOptions?: Partial<UseApiOptions<TRequest>>) => {
-    latestOptions.current = { ...latestOptions.current, ...overrideOptions };
-    setShouldFetch(true); // triggers the useEffect above
+  // ✅ Manual trigger (supports dynamic paths)
+  const refetch = async (
+    overrideOptions?: RefetchOptions<TRequest>
+  ): Promise<TResponse | null> => {
+    latestOptions.current = {
+      ...latestOptions.current,
+      ...overrideOptions,
+    };
+
+    const path = overrideOptions?.path
+      ? `${baseUrl}${overrideOptions.path}`
+      : overrideOptions?.urlOverride || baseUrl;
+
+    return await fetchData(path);
   };
 
   return { data, loading, error, refetch };
