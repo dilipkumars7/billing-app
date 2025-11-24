@@ -1,12 +1,17 @@
 import React, { useState, useEffect, useRef } from "react";
 import styled from "@emotion/styled";
-import { Button, Dropdown, MenuProps } from "antd";
+import { Button, Dropdown, MenuProps, Checkbox, Tag } from "antd";
 import { HiArrowNarrowUp, HiArrowNarrowDown } from "react-icons/hi";
 import { RxDotsHorizontal } from "react-icons/rx";
 import { IoClose } from "react-icons/io5";
 import { MdCheck } from "react-icons/md";
-import { Editable } from './ui/editable';
 import "../css/common.css";
+import "../css/table.css";
+import { Input, InputNumber, DatePicker, Select } from "antd";
+import dayjs from "dayjs";
+import { IoIosArrowDown } from "react-icons/io";
+import { useNavigate } from "react-router-dom";
+
 
 const TableContainer = styled.div`
   width: 100%;
@@ -52,21 +57,45 @@ const BodyWrapper = styled.div`
   vertical-align: top;
 `;
 
-const Row = styled.div`
+const Row = styled.div<{ isEditing?: boolean }>`
   display: flex;
   width: 100%;
   font-size: 13px;
+  background-color: ${(props) => props.isEditing ? "#f0f8ff" : "transparent"};
+  border-left: ${(props) => props.isEditing ? "4px solid #1890ff" : "4px solid transparent"};
+  transition: all 0.2s ease;
+  
   &:hover {
-    background-color: #f0f0f0;
+    background-color: ${(props) => props.isEditing ? "#e6f4ff" : "#f0f0f0"};
   }
 `;
 
-const Cell = styled.div<{ isHovered: boolean; isHeaserCell: boolean }>`
+const Cell = styled.div<{ isHovered: boolean; isHeaderCell: boolean; isCheckbox?: boolean; isEditing?: boolean }>`
   ${(props) =>
-    props.isHeaserCell &&
+    props.isHeaderCell &&
     `display: flex;
     align-items: center;
-    background-color: #f8fbff;
+    background-color: #f0f1f2;
+    `}
+  ${(props) =>
+    props.isCheckbox &&
+    `display: flex;
+    justify-content: center;
+    border-left: unset !important;
+    `}
+ ${(props) =>
+    (!props.isHeaderCell && props.isCheckbox) &&
+    `display: flex;
+    align-items: center;
+    min-width:47px !important;
+    `}
+    
+  ${(props) =>
+    props.isEditing &&
+    ` outline: 3px solid #1890ff !important;
+      outline-offset: -3px;
+      z-index: 10;
+      background: #fff;
     `}
   position: relative;
   padding: 9px;
@@ -77,10 +106,11 @@ const Cell = styled.div<{ isHovered: boolean; isHeaserCell: boolean }>`
   text-align: left;
   box-sizing: border-box;
   flex-shrink: 0;
-  min-width: 150px;
+  min-width: ${(props) => props.isCheckbox ? "50px" : "150px"};
   text-overflow: ellipsis;
   border-right: ${(props) =>
     props.isHovered ? "3px solid #408CF9" : "1px solid #091E4224"};
+  transition: all 0.2s ease;
 `;
 
 const Resizer = styled.div`
@@ -105,21 +135,41 @@ const SortSpacer = styled.div<{ isHovered: boolean; isSorted: boolean }>`
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
-  /* 👇 Hide by default; show only when hovered or sorted */
   visibility: ${(props) => (props.isHovered || props.isSorted ? "visible" : "hidden")};
   transition: visibility 0.2s ease-in-out;
 `;
 
-interface TableProps {
-  TableHeader: { headerName: string; defaultWidth: string; field: string; type?: "text" | "number" | "date" | "select" | "dropdown"; options?: { [key: string]: any }[]; }[];
-  TableData: { [key: string]: any }[];
-  onRowChange?: (rowIndex: number, updatedRow: Record<string, any>) => void
+interface TableHeaderConfig {
+  headerName: string;
+  defaultWidth: string;
+  field: string;
+  type?: "text" | "number" | "date" | "select" | "dropdown";
+  options?: { [key: string]: any }[];
+  isEditable?: boolean | ((row: any, field: string) => boolean);
+  displayAsChip?: boolean;
 }
 
-export default function Table({ TableHeader, TableData, onRowChange }: TableProps) {
+interface TableProps {
+  TableHeader: TableHeaderConfig[];
+  TableData: { [key: string]: any }[];
+  onRowChange?: (rowIndex: number, updatedRow: Record<string, any>) => void;
+  checkbox?: boolean;
+  onSelectionChange?: (selectedRows: any[]) => void;
+}
+
+export default function Table({ 
+  TableHeader, 
+  TableData, 
+  onRowChange,
+  checkbox = false,
+  onSelectionChange
+}: TableProps) {
   const [originalData] = useState(TableData);
   const [sortedData, setSortedData] = useState(TableData);
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+  const [editingRows, setEditingRows] = useState<Set<string>>(new Set());
 
+  const checkboxWidth = 10;
   const columnWidthsRef = useRef(
     TableHeader.map((item) => Number(item.defaultWidth) || 150)
   );
@@ -129,13 +179,22 @@ export default function Table({ TableHeader, TableData, onRowChange }: TableProp
   const [sortColumn, setSortColumn] = useState<number | null>(null);
   const [headerLeft, setHeaderLeft] = useState(0);
   const [sortBy, setSortBy] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<"ASC" | "DESC" | null>(
-    null
-  );
+  const [sortDirection, setSortDirection] = useState<"ASC" | "DESC" | null>(null);
+  const [editingCells, setEditingCells] = useState<Set<string>>(new Set());
 
   const scrollableBodyRef = useRef<HTMLDivElement>(null);
 
-  // --- Initialize sort state from URL ---
+  const navigate = useNavigate();
+
+  // Emit selected rows whenever selection changes
+  useEffect(() => {
+    if (onSelectionChange) {
+      const selected = sortedData.filter((_, index) => selectedRows.has(index));
+      onSelectionChange(selected);
+    }
+  }, [selectedRows, sortedData, onSelectionChange]);
+
+  // Initialize sort state from URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlSortBy = params.get("sortBy");
@@ -147,7 +206,7 @@ export default function Table({ TableHeader, TableData, onRowChange }: TableProp
     }
   }, []);
 
-  // --- Update URL when sort state changes ---
+  // Update URL when sort state changes
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
 
@@ -163,7 +222,7 @@ export default function Table({ TableHeader, TableData, onRowChange }: TableProp
     window.history.pushState(null, "", newUrl);
   }, [sortBy, sortDirection]);
 
-  // --- Apply sorting logic ---
+  // Apply sorting logic
   useEffect(() => {
     if (!sortBy || !sortDirection) {
       setSortedData(originalData);
@@ -193,7 +252,7 @@ export default function Table({ TableHeader, TableData, onRowChange }: TableProp
     setSortedData(sorted);
   }, [sortBy, sortDirection, originalData]);
 
-  // --- Scroll synchronization ---
+  // Scroll synchronization
   useEffect(() => {
     const body = scrollableBodyRef.current;
     if (!body) return;
@@ -209,7 +268,7 @@ export default function Table({ TableHeader, TableData, onRowChange }: TableProp
     return () => body.removeEventListener("scroll", handleBodyScroll);
   }, []);
 
-  // --- Column resizing ---
+  // Column resizing
   const resizingIndex = useRef<number | null>(null);
   const resizeOffset = useRef(0);
 
@@ -247,7 +306,6 @@ export default function Table({ TableHeader, TableData, onRowChange }: TableProp
         i === rowIndex ? { ...row, [field]: newValue } : row
       );
 
-      // 🟢 Emit the full updated row to parent
       if (onRowChange) {
         onRowChange(rowIndex, updatedData[rowIndex]);
       }
@@ -256,7 +314,52 @@ export default function Table({ TableHeader, TableData, onRowChange }: TableProp
     });
   };
 
-  // --- Sort handlers ---
+  // Selection handlers
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedRows(new Set(sortedData.map((_, i) => i)));
+    } else {
+      setSelectedRows(new Set());
+    }
+  };
+
+  const handleRowSelect = (rowIndex: number, checked: boolean) => {
+    setSelectedRows((prev) => {
+      const newSet = new Set(prev);
+      if (checked) {
+        newSet.add(rowIndex);
+      } else {
+        newSet.delete(rowIndex);
+      }
+      return newSet;
+    });
+  };
+
+  const handleEditStart = (rowIndex: number, colIndex: number) => {
+    setEditingRows((prev) => new Set(prev).add(`${rowIndex}-${colIndex}`));
+  };
+
+  const handleEditEnd = (rowIndex: number, colIndex: number) => {
+    setEditingRows((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(`${rowIndex}-${colIndex}`);
+      return newSet;
+    });
+  };
+
+  const activateCell = (rowIndex: number, colIndex: number) => {
+    setEditingCells(new Set([`${rowIndex}-${colIndex}`])); // allow 1 active at a time
+  };
+
+  const deactivateCell = (rowIndex: number, colIndex: number) => {
+    setEditingCells(prev => {
+      const next = new Set(prev);
+      next.delete(`${rowIndex}-${colIndex}`);
+      return next;
+    });
+  };
+
+  // Sort handlers
   const handleSort = (field: string, direction: "ASC" | "DESC") => {
     setSortBy(field);
     setSortDirection(direction);
@@ -267,7 +370,7 @@ export default function Table({ TableHeader, TableData, onRowChange }: TableProp
     setSortDirection(null);
   };
 
-  // --- Dropdown items ---
+  // Dropdown items
   const generateMenuItems = (field: string): MenuProps["items"] => [
     {
       label: (
@@ -314,13 +417,29 @@ export default function Table({ TableHeader, TableData, onRowChange }: TableProp
     },
   ];
 
-  const totalWidth = columnWidths.reduce((acc, w) => acc + w, 0);
+  const totalWidth = columnWidths.reduce((acc, w) => acc + w, 0) + (checkbox ? checkboxWidth : 0);
+  const isAllSelected = sortedData.length > 0 && selectedRows.size === sortedData.length;
+  const isIndeterminate = selectedRows.size > 0 && selectedRows.size < sortedData.length;
 
   return (
     <TableContainer>
       <HeaderScrollContainer>
         <HeaderWrapper style={{ left: `${headerLeft}px`, width: `${totalWidth}px` }}>
           <HeaderRow isScrolled={isScrolled}>
+            {checkbox && (
+              <Cell
+                isHovered={false}
+                isHeaderCell={true}
+                isCheckbox={true}
+                style={{ width: `${checkboxWidth}px` }}
+              >
+                <Checkbox
+                  checked={isAllSelected}
+                  indeterminate={isIndeterminate}
+                  onChange={(e) => handleSelectAll(e.target.checked)}
+                />
+              </Cell>
+            )}
             {TableHeader.map((item, index) => (
               <Cell
                 key={index}
@@ -328,7 +447,7 @@ export default function Table({ TableHeader, TableData, onRowChange }: TableProp
                 isHovered={hoveredColumn === index}
                 onMouseEnter={() => setSortColumn(index)}
                 onMouseLeave={() => setSortColumn(null)}
-                isHeaserCell={true}
+                isHeaderCell={true}
               >
                 <div>{item.headerName}</div>
                 {SortFunction(index, item)}
@@ -346,24 +465,68 @@ export default function Table({ TableHeader, TableData, onRowChange }: TableProp
       <ScrollableBody ref={scrollableBodyRef}>
         <BodyWrapper style={{ width: `${totalWidth}px` }}>
           {sortedData.map((item, rowIndex) => (
-            <Row key={rowIndex}>
-              {TableHeader.map((header, colIndex) => (
+            <Row key={rowIndex} isEditing={editingRows.has(rowIndex)}>
+              {checkbox && (
                 <Cell
-                  key={colIndex}
-                  style={{ width: `${columnWidths[colIndex]}px` }}
-                  isHovered={hoveredColumn === colIndex}
-                  isHeaserCell={false}
+                  isHovered={false}
+                  isHeaderCell={false}
+                  isCheckbox={true}
+                  style={{ width: `${checkboxWidth}px` }}
                 >
-                  <EditableCell
-                    value={item[header.field]}
-                    rowIndex={rowIndex}
-                    field={header.field}
-                    type={header.type || "text"} // 👈 New property in TableHeader
-                    options={header.options}     // 👈 For select/dropdown fields
-                    onValueChange={handleCellValueChange}
+                  <Checkbox
+                    checked={selectedRows.has(rowIndex)}
+                    onChange={(e) => handleRowSelect(rowIndex, e.target.checked)}
                   />
                 </Cell>
-              ))}
+              )}
+              {TableHeader.map((header, colIndex) => {
+                 const cellKey = `${rowIndex}-${colIndex}`;
+                 const isEditing = editingCells.has(cellKey);
+                const isCellEditable = typeof header.isEditable === "function"
+                  ? header.isEditable(item, header.field)
+                  : header.isEditable !== false;
+
+                return (
+                  <Cell
+                    key={colIndex}
+                    style={{ width: `${columnWidths[colIndex]}px` }}
+                    isHovered={hoveredColumn === colIndex}
+                    isHeaderCell={false}
+                    isEditing={isEditing}
+                    onClick={() => activateCell(rowIndex, colIndex)} 
+                  >
+                    {header.isEditable && (
+
+
+                      <EditableCell
+                        value={item[header.field]}
+                        rowIndex={rowIndex}
+                        colIndex={colIndex}
+                        field={header.field}
+                        type={header.type || "text"}
+                        options={header.options}
+                        onValueChange={handleCellValueChange}
+                        isEditable={isCellEditable}
+                        displayAsChip={header.displayAsChip}
+                        onDeactivate={() => deactivateCell(rowIndex, colIndex)}
+                        isActive={isEditing}  
+                      />
+                    )}
+                    {!header.isEditable && (
+                      header.field.toLowerCase().includes("code") ? (
+                        <div
+                          onClick={() => navigate(`/item/${item[header.field]}`)}
+                          className="text-[#1868DB] underline cursor-pointer hover:text-blue-800 select-none"
+                        >
+                          {item[header.field]}
+                        </div>
+                      ) : (
+                        <span className="select-none">{item[header.field]}</span>
+                      )
+                    )}
+                  </Cell>
+                );
+              })}
             </Row>
           ))}
         </BodyWrapper>
@@ -371,58 +534,70 @@ export default function Table({ TableHeader, TableData, onRowChange }: TableProp
     </TableContainer>
   );
 
-  function SortFunction(index: number, item: { headerName: string; defaultWidth: string; field: string; }) {
-    return <SortSpacer isHovered={sortColumn === index} isSorted={sortBy === item.field}>
-      {(sortColumn === index || sortBy === item.field) && (
-        <Button
-          type="text"
-          style={{ padding: 0 }}
-          onClick={() => handleSort(
-            item.field,
-            sortBy === item.field && sortDirection === "ASC" ? "DESC" : "ASC"
-          )}
-          variant={`${sortBy === item.field ? "text" : "filled"}`}
-          color={`${sortBy === item.field ? "primary" : "default"}`}
-        >
-          {sortBy === item.field ? (
-            sortDirection === "ASC" ? (
-              <HiArrowNarrowUp size={16} />
+
+  function SortFunction(index: number, item: TableHeaderConfig) {
+    return (
+      <SortSpacer isHovered={sortColumn === index} isSorted={sortBy === item.field}>
+        {(sortColumn === index || sortBy === item.field) && (
+          <Button
+            type="text"
+            style={{ padding: 0 }}
+            onClick={() => handleSort(
+              item.field,
+              sortBy === item.field && sortDirection === "ASC" ? "DESC" : "ASC"
+            )}
+            variant={`${sortBy === item.field ? "text" : "filled"}`}
+            color={`${sortBy === item.field ? "primary" : "default"}`}
+          >
+            {sortBy === item.field ? (
+              sortDirection === "ASC" ? (
+                <HiArrowNarrowUp size={16} />
+              ) : (
+                <HiArrowNarrowDown size={16} />
+              )
             ) : (
-              <HiArrowNarrowDown size={16} />
-            )
-          ) : (
-            <HiArrowNarrowUp size={16} className="opacity-50" />
-          )}
-        </Button>
-      )}
-      <Dropdown
-        menu={{ items: generateMenuItems(item.field) }}
-        trigger={["click"]}
-        overlayStyle={{ width: "160px" }}
-      >
-        <Button type="text" style={{ padding: 0 }}>
-          <RxDotsHorizontal size={16} />
-        </Button>
-      </Dropdown>
-    </SortSpacer>;
+              <HiArrowNarrowUp size={16} className="opacity-50" />
+            )}
+          </Button>
+        )}
+        <Dropdown
+          menu={{ items: generateMenuItems(item.field) }}
+          trigger={["click"]}
+          overlayStyle={{ width: "160px" }}
+        >
+          <Button type="text" style={{ padding: 0 }}>
+            <RxDotsHorizontal size={16} />
+          </Button>
+        </Dropdown>
+      </SortSpacer>
+    );
   }
 }
-
 
 function EditableCell({
   value,
   rowIndex,
+  colIndex,
   field,
   type,
   options,
   onValueChange,
+  isEditable = true,
+  displayAsChip = false,
+  onDeactivate,
+  isActive = false,               // <-- new prop
 }: {
   value: any;
   rowIndex: number;
+  colIndex: number;
   field: string;
   type: "text" | "number" | "date" | "select" | "dropdown";
   options?: { [key: string]: any }[] | string[];
   onValueChange: (rowIndex: number, field: string, newValue: any) => void;
+  isEditable?: boolean;
+  displayAsChip?: boolean;
+  onDeactivate?: (rowIndex: number, colIndex: number) => void;
+  isActive?: boolean;
 }) {
   const [localValue, setLocalValue] = useState(
     value !== null && value !== undefined ? String(value) : ""
@@ -433,99 +608,97 @@ function EditableCell({
   }, [value]);
 
   const handleChange = (newVal: any) => {
-    setLocalValue(newVal);
-    let parsedValue: any = newVal;
-    if (type === "number") parsedValue = newVal === "" ? null : Number(newVal);
-    if (type === "date") parsedValue = newVal ? new Date(newVal) : null;
-    onValueChange(rowIndex, field, parsedValue);
+    setLocalValue(newVal === null || newVal === undefined ? "" : String(newVal));
+    let parsed: any = newVal;
+    if (type === "number") parsed = newVal === "" || newVal == null ? null : Number(newVal);
+    if (type === "date") parsed = newVal ? newVal.toDate() : null;
+    onValueChange(rowIndex, field, parsed);
   };
 
-  // ✅ Format date for display
+  const handleBlur = () => {
+    onDeactivate?.(rowIndex, colIndex);
+  };
+
   const formatDate = (val: any) => {
     if (!val) return "—";
-    const dateObj = new Date(val);
-    if (isNaN(dateObj.getTime())) return val; // invalid date, return raw
-    return dateObj.toISOString().split("T")[0]; // YYYY-MM-DD
+    const dt = new Date(val);
+    return isNaN(dt.getTime()) ? val : dt.toISOString().split("T")[0];
   };
 
-  return (
-    <Editable.Root
-      value={localValue ?? ""}
-      onValueChange={(e) => handleChange(e.value ?? "")}
-      placeholder="Click to edit"
-      autoFocus
-      selectOnFocus
-      className="w-full"
-    >
-      <Editable.Area className="flex items-center w-full">
-        {/* Preview Mode */}
-        <Editable.Preview className="truncate w-full cursor-text text-[13px] text-gray-800">
-          {type === "date" ? formatDate(value) : localValue?.toString() || "—"}
-        </Editable.Preview>
+  // READ-ONLY preview (show when NOT active)
+  if (!isActive) {
+    const display = type === "date" ? formatDate(value) : localValue || "—";
+    if (displayAsChip && localValue) {
+      return <Tag color="blue" style={{ margin: 0 }}>{display}</Tag>;
+    }
+    return <div className="text-[13px] select-none">{display}</div>;
+  } 
 
-        {/* Edit Mode */}
-        <Editable.Input asChild>
-          {(() => {
-            switch (type) {
-              case "number":
-                return (
-                  <input
-                    type="number"
-                    autoFocus
-                    defaultValue=""
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleChange(e.target.value)}
-                    className="w-full border border-blue-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                );
-              case "date":
-                return (
-                  <input
-                    type="date"
-                    autoFocus
-                    defaultValue=""
-                    onChange={(e) => handleChange(e.target.value)}
-                    className="w-full border border-blue-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                );
-              case "select":
-              case "dropdown":
-                return (
-                  <select
-                    autoFocus
-                    defaultValue=""
-                    onChange={(e) => handleChange(e.target.value)}
-                    className="w-full border border-blue-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    <option value="">Select</option>
-                    {options?.map((opt: any) => {
-                      const label =
-                        typeof opt === "string" ? opt : opt.label ?? opt.value;
-                      const val =
-                        typeof opt === "string" ? opt : opt.value ?? opt.label;
-                      return (
-                        <option key={val} value={val}>
-                          {label}
-                        </option>
-                      );
-                    })}
-                  </select>
-                );
-              default:
-                return (
-                  <input
-                    type="text"
-                    autoFocus
-                    defaultValue=""
-                    onFocus={(e) => e.target.select()}
-                    onChange={(e) => handleChange(e.target.value)}
-                    className="w-full border border-blue-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                );
+
+  // ACTIVE EDIT MODE: render the input only
+  return (
+    <div style={{ width: "100%" }}>
+      {type === "number" && (
+        <InputNumber
+          autoFocus
+          variant="borderless"
+          value={localValue !== "" ? Number(localValue) : null}
+          onChange={(v) => handleChange(v ?? "")}
+          onBlur={handleBlur}
+          controls={false}
+          // optional: prevent wheel from accidentally changing value
+          onWheel={(e) => (e.currentTarget as HTMLElement).blur()}
+          precision={0}
+          onKeyPress={(event) => {
+            if (!/[0-9]/.test(event.key)) { // Allows only digits
+              event.preventDefault();
             }
-          })()}
-        </Editable.Input>
-      </Editable.Area>
-    </Editable.Root>
+          }}
+        />
+      )}
+
+      {type === "date" && (
+        <DatePicker
+          autoFocus
+          variant="borderless"
+          value={localValue ? dayjs(localValue) : null}
+          onChange={(d) => handleChange(d)}
+          onBlur={handleBlur as any}
+          style={{
+            width: "100%",
+            border: "none",
+            background: "transparent",
+          }}
+        />
+      )}
+
+      {(type === "select" || type === "dropdown") && (
+        <Select
+          variant="borderless"
+          autoFocus
+          showSearch
+          value={localValue || undefined}
+          options={options?.map((opt: any) => ({
+            label: typeof opt === "string" ? opt : opt.label ?? opt.value,
+            value: typeof opt === "string" ? opt : opt.value ?? opt.label,
+          }))}
+          onChange={(v) => handleChange(v)}
+          onBlur={handleBlur}
+          style={{ width: "100%" }}
+          suffixIcon={<IoIosArrowDown size={20} />}
+        />
+      )}
+
+      {type === "text" && (
+        <Input
+          variant="borderless"
+          type="text"
+          autoFocus
+          value={localValue}
+          onChange={(e) => handleChange(e.target.value)}
+          onBlur={handleBlur}
+        />
+      )}
+    </div>
   );
 }

@@ -112,7 +112,7 @@ const MainContent = styled.main<{ isOpen: boolean }>`
   grid-area: main;
   background-color: #FFFFFF;
   overflow-y: auto;
-  padding: 24px;
+  padding: 12px;
   width: 100%;
   transition: width 0.3s ease-in-out;
 

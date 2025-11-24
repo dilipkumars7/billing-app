@@ -4,7 +4,12 @@ import NotFound from "./not-found";
 import ProtectedRoute from "../auth/ProtectedRoute";
 import Layout from "./layout";
 import Dashboard from "./dashboard";
-import List from "./list";
+
+
+import ItemList from "./item/itemList";
+import ItemNew from "./item/new";
+import ItemEdit from "./item/edit";
+import ItemGet from "./item/get";
 
 export default function AppRoutes() {
   return (
@@ -20,7 +25,14 @@ export default function AppRoutes() {
         <Route element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/list" element={<List />} />
+          
+          <Route path="item">
+            <Route index element={<ItemList />} />            {/* /item */}
+            <Route path="new" element={<ItemNew />} />       {/* /item/new */}
+            <Route path="edit/:id" element={<ItemEdit />} /> {/* /item/edit/123 */}
+            <Route path=":id" element={<ItemGet />} />        {/* /item/123 */}
+          </Route>
+          
         </Route>
       </Route>
 

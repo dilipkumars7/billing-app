@@ -34,7 +34,7 @@ export default function Navbar({ isOpen, onToggle }: NavbarProps) {
           </div>
         </div>
       ),
-      key: "log",
+      key: "loga",
       // onClick: () => handleSort(field, "ASC"),
     },
     {

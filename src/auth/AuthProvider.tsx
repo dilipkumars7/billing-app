@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { CookieService } from "../store/Cookie";
+import { useDispatch } from "react-redux"
+import { resetStore } from "../store/resetActions";
 
 type User = { username?: string } | null;
 
@@ -71,9 +73,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     navigate("/dashboard", { replace: true });
   };
 
+  const dispatch = useDispatch();
+
   // ✅ Logout
   const logout = () => {
     setUser(null);
+    dispatch(resetStore());
     CookieService.remove("user");
     CookieService.remove("authToken");
     navigate("/login", { replace: true });

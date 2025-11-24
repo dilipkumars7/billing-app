@@ -17,3 +17,19 @@ export const ApiService = {
     return await httpClient.delete(url);
   },
 };
+
+
+export const apiPut = async (url: string, data: any) => {
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || "PUT request failed");
+  }
+
+  return response.json();
+};

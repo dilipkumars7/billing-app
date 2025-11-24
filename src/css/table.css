@@ -1,0 +1,38 @@
+:where(.css-dev-only-do-not-override-1ygoyzi).ant-input {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0px 2px;
+  color: rgba(0, 0, 0, 0.88);
+  font-size: inherit;
+  font-family: 'DKSans';
+}
+
+:where(.css-dev-only-do-not-override-1ygoyzi).ant-input-number .ant-input-number-input {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0px 2px;
+  color: rgba(0, 0, 0, 0.88);
+  font-size: inherit;
+  font-family: 'DKSans';
+}
+
+:where(.css-dev-only-do-not-override-1ygoyzi).ant-select {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0px 2px;
+  color: rgba(0, 0, 0, 0.88);
+  font-size: inherit;
+  font-family: 'DKSans';
+}
+
+:where(.css-dev-only-do-not-override-1ygoyzi).ant-select-single {
+  font-size: 12px;
+  height: 20px;
+}
+
+:where(.css-dev-only-do-not-override-1ygoyzi).ant-select-single:not(.ant-select-customize-input) .ant-select-selector {
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  padding: 0 2px;
+}

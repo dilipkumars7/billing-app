@@ -11,16 +11,14 @@ interface UseApiOptions<TRequest = any> {
 }
 
 interface RefetchOptions<TRequest = any> extends Partial<UseApiOptions<TRequest>> {
-  /** optional path segment to append to base URL */
   path?: string;
-  /** optional complete override of the URL */
   urlOverride?: string;
 }
 
 interface UseApiResponse<TResponse, TRequest> {
   data: TResponse | null;
   loading: boolean;
-  error: string | null;
+  error: any | null;
   refetch: (overrideOptions?: RefetchOptions<TRequest>) => Promise<TResponse | null>;
 }
 
@@ -30,24 +28,26 @@ export function useApi<TResponse, TRequest = any>(
 ): UseApiResponse<TResponse, TRequest> {
   const {
     method = "GET",
-    params = undefined,
-    body = undefined,
+    params,
+    body,
     autoFetch = true,
   } = options;
 
   const [data, setData] = useState<TResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(autoFetch);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<any | null>(null);
 
+  // Stores most recent method/params/body without causing rerenders
   const latestOptions = useRef<UseApiOptions<TRequest>>({
     method,
     params,
-    body,
+    body
   });
 
-  const [shouldFetch, setShouldFetch] = useState(false);
+  // Ensures auto-fetch runs only once even in StrictMode
+  const hasInitialized = useRef(false);
 
-  // ✅ Core API request logic
+  // 🔨 Core API request logic
   const fetchData = useCallback(
     async (customUrl?: string): Promise<TResponse | null> => {
       setLoading(true);
@@ -69,18 +69,18 @@ export function useApi<TResponse, TRequest = any>(
           case "DELETE":
             response = await ApiService.delete<TResponse>(finalUrl);
             break;
-          case "GET":
           default:
             response = await ApiService.get<TResponse>(finalUrl, params);
             break;
         }
 
         setData(response);
+        setError(null); // Clear any previous errors
         return response;
       } catch (err: any) {
-        setError(
-          err?.response?.data || err || 'Something went wrong.'
-        );
+        const errorData = err?.response?.data || err.message || "Something went wrong.";
+        setError(errorData);
+        setData(null); // Clear data on error
         return null;
       } finally {
         setLoading(false);
@@ -89,29 +89,30 @@ export function useApi<TResponse, TRequest = any>(
     [baseUrl]
   );
 
-  // ✅ Auto-fetch if required
+  // Run auto-fetch once
   useEffect(() => {
-    if (autoFetch || shouldFetch) {
+    if (autoFetch && !hasInitialized.current) {
+      hasInitialized.current = true;
       fetchData();
-      setShouldFetch(false);
     }
-  }, [fetchData, autoFetch, shouldFetch]);
+  }, [autoFetch, fetchData]);
 
-  // ✅ Manual trigger (supports dynamic paths)
-  const refetch = async (
+  const refetch = useCallback(async (
     overrideOptions?: RefetchOptions<TRequest>
   ): Promise<TResponse | null> => {
+
+    // Update latest options with overrides
     latestOptions.current = {
       ...latestOptions.current,
-      ...overrideOptions,
+      ...overrideOptions
     };
 
-    const path = overrideOptions?.path
-      ? `${baseUrl}${overrideOptions.path}`
-      : overrideOptions?.urlOverride || baseUrl;
+    const url =
+      overrideOptions?.urlOverride ||
+      (overrideOptions?.path ? `${baseUrl}${overrideOptions.path}` : baseUrl);
 
-    return await fetchData(path);
-  };
+    return await fetchData(url);
+  }, [baseUrl, fetchData]);
 
   return { data, loading, error, refetch };
 }

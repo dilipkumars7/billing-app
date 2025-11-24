@@ -12,7 +12,7 @@ export default function Sidebar() {
           {SIDEBAR_DATA.map((item) => {
             const IconComponent = item.icon;
             return (
-              <StyledNavLink key={item.name} to={item.path} end>
+              <StyledNavLink key={item.name} to={item.path} >
                 {({ isActive }) => (
                   <div className="flex items-center gap-1">
                     {IconComponent && (

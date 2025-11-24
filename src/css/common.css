@@ -407,6 +407,10 @@
   --ds-elevation-surface-current: #FFFFFF;
 }
 
+button{
+  font-family: "DKsans" !important;
+}
+
 
 .nav-header{
   border-block-end: 1px solid var(--sdk-border, #EBECF0);
@@ -501,6 +505,7 @@
   animation-timing-function: linear;
   animation-fill-mode: both;
   width: 100%;
+  font-size: 12px;
 }
 
 @keyframes shake {
@@ -527,4 +532,14 @@
   height: auto !important;
   padding: 5px !important;
   border-radius: 6px !important;
+}
+
+
+:where(.css-dev-only-do-not-override-1ygoyzi).ant-input-outlined {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 7px 11px !important;
+  color: rgba(0, 0, 0, 0.88);
+  font-size: inherit;
+  font-family: 'DKSans';
 }
