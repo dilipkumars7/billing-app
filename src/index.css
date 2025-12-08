@@ -47,6 +47,11 @@
   }
 }
 
+@layer reset{
+  
+}
+
+
 .hero_section{
   position: relative;
   height: auto;

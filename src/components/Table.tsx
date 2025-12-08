@@ -155,6 +155,7 @@ interface TableProps {
   onRowChange?: (rowIndex: number, updatedRow: Record<string, any>) => void;
   checkbox?: boolean;
   onSelectionChange?: (selectedRows: any[]) => void;
+  TableName?: string;
 }
 
 export default function Table({ 
@@ -162,21 +163,38 @@ export default function Table({
   TableData, 
   onRowChange,
   checkbox = false,
-  onSelectionChange
+  onSelectionChange,
+  TableName
 }: TableProps) {
   const [originalData] = useState(TableData);
   const [sortedData, setSortedData] = useState(TableData);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [editingRows, setEditingRows] = useState<Set<string>>(new Set());
-
   const checkboxWidth = 10;
-  const columnWidthsRef = useRef(
-    TableHeader.map((item) => Number(item.defaultWidth) || 150)
-  );
-  const [columnWidths, setColumnWidths] = useState(columnWidthsRef.current);
+  const columnWidthsRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    TableHeader.forEach(h => {
+      if (!(h.field in columnWidthsRef.current)) {
+        columnWidthsRef.current[h.field] =
+          Number(h.defaultWidth) || 150;
+      }
+    });
+  }, [TableHeader]);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {};
+    TableHeader.forEach(h => {
+      initial[h.field] = Number(h.defaultWidth) || 150;
+    });
+    return initial;
+  });
+  useEffect(() => {
+  columnWidthsRef.current = columnWidths;
+}, [columnWidths]);
+
+
   const [isScrolled, setIsScrolled] = useState(false);
-  const [hoveredColumn, setHoveredColumn] = useState<number | null>(null);
-  const [sortColumn, setSortColumn] = useState<number | null>(null);
+  const [hoveredColumn, setHoveredColumn] = useState<string | null>(null);
+  const [HeaderHoverdColumn, setHeaderHoveredColumn] = useState<string | null>(null);
   const [headerLeft, setHeaderLeft] = useState(0);
   const [sortBy, setSortBy] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"ASC" | "DESC" | null>(null);
@@ -272,19 +290,63 @@ export default function Table({
   const resizingIndex = useRef<number | null>(null);
   const resizeOffset = useRef(0);
 
+  // 👇 which column (field) is currently being resized
+  const resizingFieldRef = useRef<string | null>(null);
+
   const handleMouseMove = (event: MouseEvent) => {
-    if (resizingIndex.current === null) return;
-    requestAnimationFrame(() => {
-      const newWidths = [...columnWidthsRef.current];
-      const newWidth = Math.max(
-        50,
-        newWidths[resizingIndex.current!] + event.clientX - resizeOffset.current
-      );
-      newWidths[resizingIndex.current!] = newWidth;
-      columnWidthsRef.current = newWidths;
-      setColumnWidths(newWidths);
-      resizeOffset.current = event.clientX;
-    });
+    const field = resizingFieldRef.current;
+    if (!field) return;
+
+    const prevWidth = columnWidthsRef.current[field] ?? 150;
+
+    const newWidth = Math.max(
+      150, // ✅ matches UI feel in screenshot
+      prevWidth + event.clientX - resizeOffset.current
+    );
+
+    const next = {
+      ...columnWidthsRef.current,
+      [field]: newWidth,
+    };
+
+    columnWidthsRef.current = next;
+    setColumnWidths(next);
+    saveColumnWidthsToLocalStorage(field, newWidth);
+
+    resizeOffset.current = event.clientX;
+  };
+
+
+  const saveColumnWidthsToLocalStorage = (field: string, width: number) => {
+    let config: any = {};
+    try {
+      const raw = localStorage.getItem("settingsConfig");
+      config = raw ? JSON.parse(raw) : {};
+    } catch (err) {
+      console.error("Corrupted settingsConfig — clearing and resetting.", err);
+      localStorage.removeItem("settingsConfig");
+      config = { tableRowOrder: {} };
+      localStorage.setItem("settingsConfig", JSON.stringify(config));
+    }
+
+    if (!config.tableRowOrder) config.tableRowOrder = {};
+    if (!config.tableRowOrder[TableName]) config.tableRowOrder[TableName] = [];
+
+    const existing = config.tableRowOrder[TableName].find(
+      (col: any) => col.name === field
+    );
+
+    if (existing) {
+      existing.width = width;
+    } else {
+      config.tableRowOrder[TableName].push({
+        name: field,
+        isVisible: true,
+        width,
+      });
+    }
+
+    localStorage.setItem("settingsConfig", JSON.stringify(config));
   };
 
   const handleMouseUp = () => {
@@ -293,8 +355,8 @@ export default function Table({
     document.removeEventListener("mouseup", handleMouseUp);
   };
 
-  const handleMouseDown = (index: number, event: React.MouseEvent) => {
-    resizingIndex.current = index;
+  const handleMouseDown = (field: string, event: React.MouseEvent) => {
+    resizingFieldRef.current = field;
     resizeOffset.current = event.clientX;
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
@@ -335,19 +397,7 @@ export default function Table({
     });
   };
 
-  const handleEditStart = (rowIndex: number, colIndex: number) => {
-    setEditingRows((prev) => new Set(prev).add(`${rowIndex}-${colIndex}`));
-  };
-
-  const handleEditEnd = (rowIndex: number, colIndex: number) => {
-    setEditingRows((prev) => {
-      const newSet = new Set(prev);
-      newSet.delete(`${rowIndex}-${colIndex}`);
-      return newSet;
-    });
-  };
-
-  const activateCell = (rowIndex: number, colIndex: number) => {
+  const activateCell = (rowIndex: number, colIndex: string) => {
     setEditingCells(new Set([`${rowIndex}-${colIndex}`])); // allow 1 active at a time
   };
 
@@ -417,7 +467,11 @@ export default function Table({
     },
   ];
 
-  const totalWidth = columnWidths.reduce((acc, w) => acc + w, 0) + (checkbox ? checkboxWidth : 0);
+  const totalWidth =
+  TableHeader.reduce(
+    (sum, h) => sum + (columnWidths[h.field] || 150),
+    0
+  ) + (checkbox ? checkboxWidth : 0);
   const isAllSelected = sortedData.length > 0 && selectedRows.size === sortedData.length;
   const isIndeterminate = selectedRows.size > 0 && selectedRows.size < sortedData.length;
 
@@ -443,17 +497,17 @@ export default function Table({
             {TableHeader.map((item, index) => (
               <Cell
                 key={index}
-                style={{ width: `${columnWidths[index]}px` }}
-                isHovered={hoveredColumn === index}
-                onMouseEnter={() => setSortColumn(index)}
-                onMouseLeave={() => setSortColumn(null)}
+                style={{ width: `${columnWidths[item.field]}px` }}
+                isHovered={hoveredColumn === item.field}
+                onMouseEnter={() => setHeaderHoveredColumn(item.field)}
+                onMouseLeave={() => setHeaderHoveredColumn(null)}
                 isHeaderCell={true}
               >
                 <div>{item.headerName}</div>
-                {SortFunction(index, item)}
+                {SortFunction(item)}
                 <Resizer
-                  onMouseDown={(event) => handleMouseDown(index, event)}
-                  onMouseEnter={() => setHoveredColumn(index)}
+                  onMouseDown={(event) => handleMouseDown(item.field, event)}
+                  onMouseEnter={() => setHoveredColumn(item.field)}
                   onMouseLeave={() => setHoveredColumn(null)}
                 />
               </Cell>
@@ -465,7 +519,7 @@ export default function Table({
       <ScrollableBody ref={scrollableBodyRef}>
         <BodyWrapper style={{ width: `${totalWidth}px` }}>
           {sortedData.map((item, rowIndex) => (
-            <Row key={rowIndex} isEditing={editingRows.has(rowIndex)}>
+            <Row key={rowIndex} isEditing={editingCells.has(`${rowIndex}-${item.field}`)}>
               {checkbox && (
                 <Cell
                   isHovered={false}
@@ -480,23 +534,22 @@ export default function Table({
                 </Cell>
               )}
               {TableHeader.map((header, colIndex) => {
-                 const cellKey = `${rowIndex}-${colIndex}`;
-                 const isEditing = editingCells.has(cellKey);
+                 const cellKey = `${rowIndex}-${header.field}`;
+                 const isEditing = editingCells.has(`${rowIndex}-${header.field}`);
                 const isCellEditable = typeof header.isEditable === "function"
                   ? header.isEditable(item, header.field)
                   : header.isEditable !== false;
 
                 return (
                   <Cell
-                    key={colIndex}
-                    style={{ width: `${columnWidths[colIndex]}px` }}
-                    isHovered={hoveredColumn === colIndex}
+                    key={header.field}
+                    style={{ width: `${columnWidths[header.field]}px` }}
+                    isHovered={hoveredColumn === header.field}
                     isHeaderCell={false}
                     isEditing={isEditing}
-                    onClick={() => activateCell(rowIndex, colIndex)} 
+                    onClick={() => activateCell(rowIndex, header.field)} 
                   >
                     {header.isEditable && (
-
 
                       <EditableCell
                         value={item[header.field]}
@@ -535,21 +588,25 @@ export default function Table({
   );
 
 
-  function SortFunction(index: number, item: TableHeaderConfig) {
+  function SortFunction(item: TableHeaderConfig) {
+    const field = item.field;
+    const isHovered = HeaderHoverdColumn === field;
+    const isSorted = sortBy === field;
+
     return (
-      <SortSpacer isHovered={sortColumn === index} isSorted={sortBy === item.field}>
-        {(sortColumn === index || sortBy === item.field) && (
+      <SortSpacer isHovered={isHovered} isSorted={isSorted}>
+        {(isHovered || isSorted) && (
           <Button
             type="text"
-            style={{ padding: 0 }}
-            onClick={() => handleSort(
-              item.field,
-              sortBy === item.field && sortDirection === "ASC" ? "DESC" : "ASC"
-            )}
-            variant={`${sortBy === item.field ? "text" : "filled"}`}
-            color={`${sortBy === item.field ? "primary" : "default"}`}
+            style={{ padding: "5px" }}
+            onClick={() =>
+              handleSort(
+                field,
+                sortBy === field && sortDirection === "ASC" ? "DESC" : "ASC"
+              )
+            }
           >
-            {sortBy === item.field ? (
+            {isSorted ? (
               sortDirection === "ASC" ? (
                 <HiArrowNarrowUp size={16} />
               ) : (
@@ -560,18 +617,20 @@ export default function Table({
             )}
           </Button>
         )}
+
         <Dropdown
-          menu={{ items: generateMenuItems(item.field) }}
+          menu={{ items: generateMenuItems(field) }}
           trigger={["click"]}
           overlayStyle={{ width: "160px" }}
         >
-          <Button type="text" style={{ padding: 0 }}>
+          <Button type="text" style={{ padding: "5px" }}>
             <RxDotsHorizontal size={16} />
           </Button>
         </Dropdown>
       </SortSpacer>
     );
   }
+
 }
 
 function EditableCell({
@@ -641,6 +700,7 @@ function EditableCell({
       {type === "number" && (
         <InputNumber
           autoFocus
+          size="small"
           variant="borderless"
           value={localValue !== "" ? Number(localValue) : null}
           onChange={(v) => handleChange(v ?? "")}
@@ -661,6 +721,7 @@ function EditableCell({
         <DatePicker
           autoFocus
           variant="borderless"
+          size="small"
           value={localValue ? dayjs(localValue) : null}
           onChange={(d) => handleChange(d)}
           onBlur={handleBlur as any}
@@ -676,6 +737,7 @@ function EditableCell({
         <Select
           variant="borderless"
           autoFocus
+          size="small"
           showSearch
           value={localValue || undefined}
           options={options?.map((opt: any) => ({
@@ -692,6 +754,7 @@ function EditableCell({
       {type === "text" && (
         <Input
           variant="borderless"
+          size="small"
           type="text"
           autoFocus
           value={localValue}
@@ -702,3 +765,5 @@ function EditableCell({
     </div>
   );
 }
+
+

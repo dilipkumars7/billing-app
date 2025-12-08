@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { ApiService } from "../api/apiService";
+import { useOverlayLoader } from "../context/OverlayLoaderContext";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 
@@ -8,6 +9,7 @@ interface UseApiOptions<TRequest = any> {
   params?: Record<string, any>;
   body?: TRequest;
   autoFetch?: boolean;
+  showOverlay?: boolean; 
 }
 
 interface RefetchOptions<TRequest = any> extends Partial<UseApiOptions<TRequest>> {
@@ -31,7 +33,10 @@ export function useApi<TResponse, TRequest = any>(
     params,
     body,
     autoFetch = true,
+    showOverlay = false, 
   } = options;
+
+   const { show, hide } = useOverlayLoader();
 
   const [data, setData] = useState<TResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(autoFetch);
@@ -41,7 +46,8 @@ export function useApi<TResponse, TRequest = any>(
   const latestOptions = useRef<UseApiOptions<TRequest>>({
     method,
     params,
-    body
+    body,
+    showOverlay
   });
 
   // Ensures auto-fetch runs only once even in StrictMode
@@ -52,6 +58,7 @@ export function useApi<TResponse, TRequest = any>(
     async (customUrl?: string): Promise<TResponse | null> => {
       setLoading(true);
       setError(null);
+      if (latestOptions.current.showOverlay) show();
 
       const { method, params, body } = latestOptions.current;
       const finalUrl = customUrl || baseUrl;
@@ -84,9 +91,10 @@ export function useApi<TResponse, TRequest = any>(
         return null;
       } finally {
         setLoading(false);
+        if (latestOptions.current.showOverlay) hide();
       }
     },
-    [baseUrl]
+    [baseUrl, show, hide]
   );
 
   // Run auto-fetch once
