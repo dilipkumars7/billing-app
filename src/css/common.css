@@ -558,3 +558,12 @@ header {
   display: unset;
   unicode-bidi: unset;
 }
+
+.delete-nonblocking-modal {
+  z-index: 0;
+  pointer-events: none;
+}
+
+.delete-nonblocking-modal .ant-modal {
+  pointer-events: auto;
+}

@@ -6,14 +6,20 @@ import Sidebar from "../components/Sidebar";
 import { Outlet } from "react-router-dom";
 
 export default function Layout() {
-  const [isOpen, setIsOpen] = useState(true); // Default open on desktop
+  const isOpened = localStorage.getItem("isOpen");
+  const [isOpen, setIsOpen] = useState<boolean>(
+    isOpened === "true" // ✅ convert string → boolean
+  );
 
   const handleToggle = () => {
-    setIsOpen(!isOpen);
+    const newValue = !isOpen;
+    setIsOpen(newValue);
+    localStorage.setItem("isOpen", String(newValue));
   };
 
   const handleClose = () => {
     setIsOpen(false);
+    localStorage.setItem("isOpen", "false");
   };
 
   return (
@@ -43,7 +49,7 @@ const LayoutGrid = styled.div<{ isOpen: boolean }>`
   grid-template-areas:
     "navbar navbar"
     "sidebar main";
-  grid-template-columns: ${({ isOpen }) => (isOpen ? "260px" : "0px")} 1fr;
+  grid-template-columns: ${({ isOpen }) => (isOpen ? "240px" : "0px")} 1fr;
   grid-template-rows: 60px 1fr;
   transition: grid-template-columns 0.3s ease-in-out;
 
@@ -90,7 +96,7 @@ const SidebarWrapper = styled.aside<{ isOpen: boolean }>`
   background-color: #ffff;
   border-right: 1px solid var(--sdk-border, #EBECF0);
   overflow-y: auto;
-  width: 260px;
+  width: 240px;
   opacity: ${({ isOpen }) => (isOpen ? "1" : "0")};
   transition: opacity 0.3s ease-in-out;
 

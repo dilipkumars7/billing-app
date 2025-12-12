@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import styled from "@emotion/styled";
 import { Button, Dropdown, MenuProps, Checkbox, Tag } from "antd";
 import { HiArrowNarrowUp, HiArrowNarrowDown } from "react-icons/hi";
@@ -155,6 +155,7 @@ interface TableProps {
   onRowChange?: (rowIndex: number, updatedRow: Record<string, any>) => void;
   checkbox?: boolean;
   onSelectionChange?: (selectedRows: any[]) => void;
+  selectedRows?: any[];
   TableName?: string;
 }
 
@@ -164,14 +165,16 @@ export default function Table({
   onRowChange,
   checkbox = false,
   onSelectionChange,
+  selectedRows,
   TableName
+  
 }: TableProps) {
-  const [originalData] = useState(TableData);
+  // const [originalData] = useState(TableData);
   const [sortedData, setSortedData] = useState(TableData);
-  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
-  const [editingRows, setEditingRows] = useState<Set<string>>(new Set());
   const checkboxWidth = 10;
   const columnWidthsRef = useRef<Record<string, number>>({});
+  const [selectedIndexes, setSelectedIndexes] = useState<Set<number>>(new Set());
+
   useEffect(() => {
     TableHeader.forEach(h => {
       if (!(h.field in columnWidthsRef.current)) {
@@ -187,9 +190,16 @@ export default function Table({
     });
     return initial;
   });
+
   useEffect(() => {
-  columnWidthsRef.current = columnWidths;
-}, [columnWidths]);
+    columnWidthsRef.current = columnWidths;
+  }, [columnWidths]);
+
+  useEffect(() => {
+    if (!selectedRows || selectedRows.length === 0) {
+      setSelectedIndexes(new Set());
+    }
+  }, [selectedRows]);
 
 
   const [isScrolled, setIsScrolled] = useState(false);
@@ -205,12 +215,12 @@ export default function Table({
   const navigate = useNavigate();
 
   // Emit selected rows whenever selection changes
-  useEffect(() => {
-    if (onSelectionChange) {
-      const selected = sortedData.filter((_, index) => selectedRows.has(index));
-      onSelectionChange(selected);
-    }
-  }, [selectedRows, sortedData, onSelectionChange]);
+  // useEffect(() => {
+  //   if (onSelectionChange) {
+  //     const selected = sortedData.filter((_, index) => selectedRows.has(index));
+  //     onSelectionChange(selected);
+  //   }
+  // }, [selectedRows, sortedData, onSelectionChange]);
 
   // Initialize sort state from URL
   useEffect(() => {
@@ -243,11 +253,11 @@ export default function Table({
   // Apply sorting logic
   useEffect(() => {
     if (!sortBy || !sortDirection) {
-      setSortedData(originalData);
+      setSortedData(TableData);
       return;
     }
 
-    const sorted = [...originalData].sort((a, b) => {
+    const sorted = [...TableData].sort((a, b) => {
       const valA = a[sortBy];
       const valB = b[sortBy];
 
@@ -268,7 +278,7 @@ export default function Table({
     });
 
     setSortedData(sorted);
-  }, [sortBy, sortDirection, originalData]);
+  }, [sortBy, sortDirection, TableData]);
 
   // Scroll synchronization
   useEffect(() => {
@@ -379,23 +389,30 @@ export default function Table({
   // Selection handlers
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedRows(new Set(sortedData.map((_, i) => i)));
+      const allIndexes = new Set(sortedData.map((_, i) => i));
+      setSelectedIndexes(allIndexes);
+      onSelectionChange?.(sortedData);
     } else {
-      setSelectedRows(new Set());
+      setSelectedIndexes(new Set());
+      onSelectionChange?.([]);
     }
   };
 
+
   const handleRowSelect = (rowIndex: number, checked: boolean) => {
-    setSelectedRows((prev) => {
-      const newSet = new Set(prev);
-      if (checked) {
-        newSet.add(rowIndex);
-      } else {
-        newSet.delete(rowIndex);
-      }
-      return newSet;
+    setSelectedIndexes(prev => {
+      const next = new Set(prev);
+      checked ? next.add(rowIndex) : next.delete(rowIndex);
+
+      // ✅ PASS FULL ROW DATA
+      onSelectionChange?.(
+        [...next].map(i => sortedData[i])
+      );
+
+      return next;
     });
   };
+
 
   const activateCell = (rowIndex: number, colIndex: string) => {
     setEditingCells(new Set([`${rowIndex}-${colIndex}`])); // allow 1 active at a time
@@ -467,16 +484,39 @@ export default function Table({
     },
   ];
 
+  const tableRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!tableRef.current) return;
+      const target = e.target as Node;
+      const isClickInsideTable = tableRef.current.contains(target);
+
+      // Detect Ant Design dropdown portals (Select, DatePicker, Cascader, etc.)
+      const isClickOnDropdown =
+        (target as Element).closest?.(".ant-select-dropdown") ||
+        (target as Element).closest?.(".ant-picker-dropdown") ||
+        (target as Element).closest?.(".ant-dropdown") ||
+        (target as Element).closest?.(".ant-cascader-dropdown");
+      // Only clear editing if click is outside BOTH table and dropdowns
+      if (!isClickInsideTable && !isClickOnDropdown) {
+        setEditingCells(new Set());
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const totalWidth =
   TableHeader.reduce(
     (sum, h) => sum + (columnWidths[h.field] || 150),
     0
   ) + (checkbox ? checkboxWidth : 0);
-  const isAllSelected = sortedData.length > 0 && selectedRows.size === sortedData.length;
-  const isIndeterminate = selectedRows.size > 0 && selectedRows.size < sortedData.length;
-
+  const isAllSelected = sortedData.length > 0 && selectedIndexes.size === sortedData.length;
+  const isIndeterminate = selectedIndexes.size > 0 && selectedIndexes.size < sortedData.length;
   return (
-    <TableContainer>
+    <TableContainer ref={tableRef}>
       <HeaderScrollContainer>
         <HeaderWrapper style={{ left: `${headerLeft}px`, width: `${totalWidth}px` }}>
           <HeaderRow isScrolled={isScrolled}>
@@ -528,7 +568,7 @@ export default function Table({
                   style={{ width: `${checkboxWidth}px` }}
                 >
                   <Checkbox
-                    checked={selectedRows.has(rowIndex)}
+                    checked={selectedIndexes.has(rowIndex)}
                     onChange={(e) => handleRowSelect(rowIndex, e.target.checked)}
                   />
                 </Cell>

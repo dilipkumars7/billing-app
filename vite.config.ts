@@ -10,4 +10,17 @@ export default defineConfig({
     tailwindcss(),
     tsconfigPaths({ root: './' })
   ],
+  define: {
+    // Fix for sockjs-client "global is not defined" error
+    global: 'globalThis',
+  },
+  resolve: {
+    alias: {
+      // Optional: Add path aliases if needed
+      '@': '/src',
+    },
+  },
+  optimizeDeps: {
+    include: ['sockjs-client'],
+  },
 })
