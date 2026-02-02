@@ -11,6 +11,10 @@ export const PATH = {
 
   GET_ITEMS_DATA:'api/items',
 
+  PURCHASE_DATA:'api/purchases',
+
+  SUPPLIERS_DATA:'api/suppliers',
+
   GET_CONFIG_HEADER:'api/header-config/table',
 
   GET_DROP_DOWN:'api/dropdown/name',

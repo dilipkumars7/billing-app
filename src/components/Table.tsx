@@ -10,7 +10,8 @@ import "../css/table.css";
 import { Input, InputNumber, DatePicker, Select } from "antd";
 import dayjs from "dayjs";
 import { IoIosArrowDown } from "react-icons/io";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import * as S from "../components/provider/SkeletonStyles";
 
 
 const TableContainer = styled.div`
@@ -75,7 +76,8 @@ const Cell = styled.div<{ isHovered: boolean; isHeaderCell: boolean; isCheckbox?
     props.isHeaderCell &&
     `display: flex;
     align-items: center;
-    background-color: #f0f1f2;
+    background-color: #F8F8F8;
+    Height: 43px;
     `}
   ${(props) =>
     props.isCheckbox &&
@@ -155,8 +157,13 @@ interface TableProps {
   onRowChange?: (rowIndex: number, updatedRow: Record<string, any>) => void;
   checkbox?: boolean;
   onSelectionChange?: (selectedRows: any[]) => void;
+  onSortClear?: () => void;
   selectedRows?: any[];
   TableName?: string;
+  Idlinkpath?: string;
+  idkey?: string;
+  HeaderLoading?: boolean;
+  DataLoading?: boolean;
 }
 
 export default function Table({ 
@@ -165,8 +172,13 @@ export default function Table({
   onRowChange,
   checkbox = false,
   onSelectionChange,
+  onSortClear,
   selectedRows,
-  TableName
+  TableName,
+  Idlinkpath,
+  HeaderLoading,
+  DataLoading,
+  idkey
   
 }: TableProps) {
   // const [originalData] = useState(TableData);
@@ -209,6 +221,7 @@ export default function Table({
   const [sortBy, setSortBy] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<"ASC" | "DESC" | null>(null);
   const [editingCells, setEditingCells] = useState<Set<string>>(new Set());
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const scrollableBodyRef = useRef<HTMLDivElement>(null);
 
@@ -234,51 +247,20 @@ export default function Table({
     }
   }, []);
 
-  // Update URL when sort state changes
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    if (!sortBy || !sortDirection) return;
 
-    if (sortBy && sortDirection) {
-      params.set("sortBy", sortBy);
-      params.set("direction", sortDirection);
-    } else {
-      params.delete("sortBy");
-      params.delete("direction");
-    }
+    const params = new URLSearchParams(searchParams);
+    params.set("sortBy", sortBy);
+    params.set("direction", sortDirection);
 
-    const newUrl = `${window.location.pathname}?${params.toString()}`;
-    window.history.pushState(null, "", newUrl);
+    setSearchParams(params, { replace: true });
   }, [sortBy, sortDirection]);
+  //Apply sorting logic
 
-  // Apply sorting logic
   useEffect(() => {
-    if (!sortBy || !sortDirection) {
       setSortedData(TableData);
-      return;
-    }
-
-    const sorted = [...TableData].sort((a, b) => {
-      const valA = a[sortBy];
-      const valB = b[sortBy];
-
-      if (valA == null) return 1;
-      if (valB == null) return -1;
-
-      if (typeof valA === "string" && typeof valB === "string") {
-        return sortDirection === "ASC"
-          ? valA.localeCompare(valB)
-          : valB.localeCompare(valA);
-      }
-
-      if (typeof valA === "number" && typeof valB === "number") {
-        return sortDirection === "ASC" ? valA - valB : valB - valA;
-      }
-
-      return 0;
-    });
-
-    setSortedData(sorted);
-  }, [sortBy, sortDirection, TableData]);
+  }, [TableData]);
 
   // Scroll synchronization
   useEffect(() => {
@@ -435,6 +417,11 @@ export default function Table({
   const handleClearSort = () => {
     setSortBy(null);
     setSortDirection(null);
+    const params = new URLSearchParams(searchParams);
+    params.delete("sortBy");
+    params.delete("direction");
+    setSearchParams(params, { replace: true });
+    onSortClear?.();
   };
 
   // Dropdown items
@@ -519,6 +506,9 @@ export default function Table({
     <TableContainer ref={tableRef}>
       <HeaderScrollContainer>
         <HeaderWrapper style={{ left: `${headerLeft}px`, width: `${totalWidth}px` }}>
+        {HeaderLoading ? (
+          <HeaderSkeleton checkbox={checkbox} />
+        ) : (
           <HeaderRow isScrolled={isScrolled}>
             {checkbox && (
               <Cell
@@ -553,75 +543,88 @@ export default function Table({
               </Cell>
             ))}
           </HeaderRow>
+        )}
         </HeaderWrapper>
       </HeaderScrollContainer>
 
       <ScrollableBody ref={scrollableBodyRef}>
         <BodyWrapper style={{ width: `${totalWidth}px` }}>
-          {sortedData.map((item, rowIndex) => (
-            <Row key={rowIndex} isEditing={editingCells.has(`${rowIndex}-${item.field}`)}>
-              {checkbox && (
-                <Cell
-                  isHovered={false}
-                  isHeaderCell={false}
-                  isCheckbox={true}
-                  style={{ width: `${checkboxWidth}px` }}
-                >
-                  <Checkbox
-                    checked={selectedIndexes.has(rowIndex)}
-                    onChange={(e) => handleRowSelect(rowIndex, e.target.checked)}
-                  />
-                </Cell>
-              )}
-              {TableHeader.map((header, colIndex) => {
-                 const cellKey = `${rowIndex}-${header.field}`;
-                 const isEditing = editingCells.has(`${rowIndex}-${header.field}`);
-                const isCellEditable = typeof header.isEditable === "function"
-                  ? header.isEditable(item, header.field)
-                  : header.isEditable !== false;
-
-                return (
+          {DataLoading ? (
+            <BodySkeleton
+              checkbox={checkbox}
+              headers={TableHeader}
+              columnWidths={columnWidths}
+            />
+          ):(
+            sortedData.map((item, rowIndex) => (
+              <Row key={rowIndex} isEditing={editingCells.has(`${rowIndex}-${item.field}`)}>
+                {checkbox && (
                   <Cell
-                    key={header.field}
-                    style={{ width: `${columnWidths[header.field]}px` }}
-                    isHovered={hoveredColumn === header.field}
+                    isHovered={false}
                     isHeaderCell={false}
-                    isEditing={isEditing}
-                    onClick={() => activateCell(rowIndex, header.field)} 
+                    isCheckbox={true}
+                    style={{ width: `${checkboxWidth}px` }}
                   >
-                    {header.isEditable && (
-
-                      <EditableCell
-                        value={item[header.field]}
-                        rowIndex={rowIndex}
-                        colIndex={colIndex}
-                        field={header.field}
-                        type={header.type || "text"}
-                        options={header.options}
-                        onValueChange={handleCellValueChange}
-                        isEditable={isCellEditable}
-                        displayAsChip={header.displayAsChip}
-                        onDeactivate={() => deactivateCell(rowIndex, colIndex)}
-                        isActive={isEditing}  
-                      />
-                    )}
-                    {!header.isEditable && (
-                      header.field.toLowerCase().includes("code") ? (
-                        <div
-                          onClick={() => navigate(`/item/${item[header.field]}`)}
-                          className="text-[#1868DB] underline cursor-pointer hover:text-blue-800 select-none"
-                        >
-                          {item[header.field]}
-                        </div>
-                      ) : (
-                        <span className="select-none">{item[header.field]}</span>
-                      )
-                    )}
+                    <Checkbox
+                      checked={selectedIndexes.has(rowIndex)}
+                      onChange={(e) => handleRowSelect(rowIndex, e.target.checked)}
+                    />
                   </Cell>
-                );
-              })}
-            </Row>
-          ))}
+                )}
+                {TableHeader.map((header, colIndex) => {
+                  const cellKey = `${rowIndex}-${header.field}`;
+                  const isEditing = editingCells.has(`${rowIndex}-${header.field}`);
+                  const isCellEditable = typeof header.isEditable === "function"
+                    ? header.isEditable(item, header.field)
+                    : header.isEditable !== false;
+
+                  return (
+                    <Cell
+                      key={header.field}
+                      style={{ width: `${columnWidths[header.field]}px` }}
+                      isHovered={hoveredColumn === header.field}
+                      isHeaderCell={false}
+                      isEditing={isEditing}
+                      onClick={() => activateCell(rowIndex, header.field)} 
+                    >
+                      {header.isEditable && (
+
+                        <EditableCell
+                          value={item[header.field]}
+                          rowIndex={rowIndex}
+                          colIndex={colIndex}
+                          field={header.field}
+                          type={header.type || "text"}
+                          options={header.options}
+                          onValueChange={handleCellValueChange}
+                          isEditable={isCellEditable}
+                          displayAsChip={header.displayAsChip}
+                          onDeactivate={() => deactivateCell(rowIndex, colIndex)}
+                          isActive={isEditing}  
+                        />
+                      )}
+                      {!header.isEditable && (
+                        header.field.toLowerCase().includes("code") ? (
+                          <div
+                            onClick={() => navigate(`/${Idlinkpath}/${item[header.field]}`)}
+                            className="text-[#1868DB] underline cursor-pointer hover:text-blue-800 select-none"
+                          >
+                            {item[header.field]}
+                          </div>
+                        ) : (
+                          <span className="select-none">{item[header.field]}</span>
+                        )
+                      )}
+                    </Cell>
+                  );
+                })}
+              </Row>
+            ))
+          )
+          }
+          {/* {sortedData.map((item, rowIndex) => (
+            
+          ))} */}
         </BodyWrapper>
       </ScrollableBody>
     </TableContainer>
@@ -746,14 +749,10 @@ function EditableCell({
           onChange={(v) => handleChange(v ?? "")}
           onBlur={handleBlur}
           controls={false}
+          precision={2} 
+          inputMode="numeric"
           // optional: prevent wheel from accidentally changing value
           onWheel={(e) => (e.currentTarget as HTMLElement).blur()}
-          precision={0}
-          onKeyPress={(event) => {
-            if (!/[0-9]/.test(event.key)) { // Allows only digits
-              event.preventDefault();
-            }
-          }}
         />
       )}
 
@@ -806,4 +805,64 @@ function EditableCell({
   );
 }
 
+
+const HeaderSkeleton = ({ checkbox }: { checkbox?: boolean }) => (
+  <HeaderRow isScrolled={false}>
+    <div css={S.tableHeader}>
+      <div css={S.headerBlock} />
+      <div css={S.headerBlock} />
+      <div css={S.headerBlock} />
+      <div css={S.headerBlock} />
+      <div css={S.headerBlock} />
+      <div css={S.headerBlock} />
+      <div css={S.headerBlock} />
+      <div css={S.headerBlock} />
+      <div css={S.headerBlock} />
+      <div css={S.headerBlock} />
+    </div>
+  </HeaderRow>
+);
+
+/** @jsxImportSource @emotion/react */
+const BodySkeleton = ({
+  rows = 15,
+  headers,
+  checkbox,
+  columnWidths,
+}: {
+  rows?: number;
+  headers: TableHeaderConfig[];
+  checkbox?: boolean;
+  columnWidths: Record<string, number>;
+}) => (
+  <>
+    {Array.from({ length: rows }).map((_, rowIndex) => (
+      <Row key={rowIndex}>
+        {checkbox && (
+          <Cell
+            isHovered={false}
+            isHeaderCell={false}
+            isCheckbox
+            style={{ width: "50px" }}
+          >
+            <div css={S.skeletonCheckbox} />
+          </Cell>
+        )}
+
+        {headers.map((header) => (
+          <Cell
+            key={header.field}
+            isHovered={false}
+            isHeaderCell={false}
+            style={{
+              width: `${(columnWidths[header.field]) ?? 150}px`,
+            }}
+          >
+            <div css={S.skeletonBlock} />
+          </Cell>
+        ))}
+      </Row>
+    ))}
+  </>
+);
 

@@ -24,6 +24,7 @@ export default function ItemNew() {
       costPrice: 0,
       sellingPrice: 0,
       taxRate: 0,
+      size: '',
     }
   })
 
@@ -40,6 +41,7 @@ export default function ItemNew() {
 
   const { data:DropDownUnit, loading:DropLoadUnit, refetch: reloadUnits } = useApi<any[]>(`${PATH.GET_DROP_DOWN}/Unit`, { method: "GET", showOverlay: true });
   const { data:DropDownCat, loading:DropLoadCat, refetch: reloadCategories } = useApi<any[]>(`${PATH.GET_DROP_DOWN}/Category`, { method: "GET", showOverlay: true });
+  const { data:DropDownSize, loading:DropLoadSize, refetch: reloadSize } = useApi<any[]>(`${PATH.GET_DROP_DOWN}/Size`, { method: "GET", showOverlay: true });
   const { data:DropDown, loading:DropLoad, refetch:DropRefetch } = useApi<any[]>(`${PATH.POST_DROP_DOWN}`, { method: "POST", autoFetch: false });
   const { data:DropDelDown, loading:DropDelLoad, refetch:DropDelRefetch } = useApi<any[]>(`${PATH.POST_DROP_DOWN}`, { method: "DELETE", autoFetch: false });
 
@@ -143,8 +145,9 @@ export default function ItemNew() {
 
   const [units, setUnits] = useState<DropdownItem[]>([]);
   const [categories, setCategories] = useState<DropdownItem[]>([]);
+  const [sizes, setSizes] = useState<DropdownItem[]>([]);
   const [openModal, setOpenModal] = useState(false);
-  const [modalType, setModalType] = useState<"category" | "unit" | null>(null);
+  const [modalType, setModalType] = useState<"category" | "unit" | "size" | null>(null);
 
   useEffect(() => {
     if (DropDownUnit) {
@@ -165,7 +168,16 @@ export default function ItemNew() {
         }))
       );
     }
-  }, [DropDownUnit, DropDownCat]);
+    if (DropDownSize) {
+      setSizes(
+        DropDownSize.map((c) => ({
+          label: `${c.dropdownValue}`,
+          value: c.dropdownValue,
+          code: c.dropdownCode,
+        }))
+      );
+    }
+  }, [DropDownUnit, DropDownCat, DropDownSize]);
 
   const deleteUnit = async (value:string) => {
     try {
@@ -232,6 +244,18 @@ export default function ItemNew() {
         });
 
         reloadUnits(); // ⭐ refresh unit list
+      }
+
+      if (modalType === "size") {
+        await DropRefetch({
+          body: {
+            dropdownName: "Size",
+            dropdownLabel: values.name,
+            dropdownValue: values.subname,
+          },
+        });
+
+        reloadSize(); // ⭐ refresh unit list
       }
 
       closeModal(); // Close modal after success
@@ -320,6 +344,23 @@ export default function ItemNew() {
             />
           </Form.Item>
 
+          {/* UNIT */}
+          <Form.Item
+            label="Size"
+            required
+            validateStatus={errors.size ? 'error' : ''}
+            help={<FormErrorMessage message={errors.size?.message} />}
+          >
+            <Controller
+              name="size"
+              control={control}
+              rules={{ required: 'Size is required' }}
+              render={({ field }) => (
+                SelectFun(field, sizes, deleteUnit, handleOpenModal, "size") 
+              )}
+            />
+          </Form.Item>
+
           {/* QUANTITY */}
           <Form.Item
             label="Quantity"
@@ -334,7 +375,7 @@ export default function ItemNew() {
                 min: { value: 1, message: 'Quantity must be at least 1' },
               }}
               render={({ field }) => (
-                <InputNumber size="large" {...field} min={1} style={{ width: '100%' }} suffix={`${selectedUnit}`} />
+                <InputNumber size="large" inputMode="numeric" {...field} min={1} style={{ width: '100%' }} suffix={`${selectedUnit}`} />
               )}
             />
           </Form.Item>
@@ -408,30 +449,31 @@ export default function ItemNew() {
         </Button>
       </Footer>
 
-      <Modal title={modalType === "category" ? "Add Category" : "Add Unit"}  open={openModal} onOk={handleSubmitDyn(onSubmitDyn)} onCancel={closeModal} okText="Save">
+      <Modal title={modalType === "category" ? "Add Category" : modalType === "size" ? "Add Size" : "Add Unit"}  open={openModal} onOk={handleSubmitDyn(onSubmitDyn)} onCancel={closeModal} okText="Save">
         <div>
            <Form {...ModelLayout} labelAlign='left'>
               <Form.Item
                 label="Name"
-                required
-                validateStatus={errorsDyn.name ? 'error' : ''}
-                help={<FormErrorMessage message={errorsDyn.name?.message} />}
-              >
-                <Controller
-                  name="name"
-                  control={controlDyn}
-                  rules={{ required: 'Name is required' }}
-                  render={({ field }) => <Input size="large" {...field} placeholder="Enter" />}
-                />
-              </Form.Item>
-              <Form.Item
-                label="SubName"
                 required
                 validateStatus={errorsDyn.subname ? 'error' : ''}
                 help={<FormErrorMessage message={errorsDyn.subname?.message} />}
               >
                 <Controller
                   name="subname"
+                  control={controlDyn}
+                  rules={{ required: 'Name is required' }}
+                  render={({ field }) => <Input size="large" {...field} placeholder="Enter" />}
+                />
+              </Form.Item>
+
+              <Form.Item
+                label="Sub Name"
+                required
+                validateStatus={errorsDyn.name ? 'error' : ''}
+                help={<FormErrorMessage message={errorsDyn.name?.message} />}
+              >
+                <Controller
+                  name="name"
                   control={controlDyn}
                   rules={{ required: 'Sub Name is required' }}
                   render={({ field }) => <Input size="large" {...field} placeholder="Enter" />}

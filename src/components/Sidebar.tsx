@@ -18,7 +18,7 @@ export default function Sidebar() {
                     {IconComponent && (
                       <IconWrapper isActive={isActive}>
                         <IconComponent
-                          size="22"
+                          size="20"
                         />
                       </IconWrapper>
                     )}

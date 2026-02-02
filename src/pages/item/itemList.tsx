@@ -1,5 +1,5 @@
 // ItemList.tsx - FIXED VERSION
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import Table from "../../components/Table";
 import { useApi } from "../../hooks/useApi";
 import { PATH } from "../../constants/app.constant";
@@ -10,7 +10,7 @@ import Tooltip from '@mui/joy/Tooltip';
 import { IoSearchOutline } from "react-icons/io5";
 import { IoMdAddCircleOutline } from "react-icons/io";
 import { LuSettings2 } from "react-icons/lu";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { itemUpdateSubject, itemUpdateStream$ } from "../../services/updateStream";
 import { useSelector } from "react-redux";
@@ -26,8 +26,10 @@ const ItemList: React.FC = () => {
 
   const notificationApi = useNotification();
 
-  const { data: itemsData, loading: itemsLoading, error: itemsError, refetch:reloadData } =
-    useApi<any[]>(PATH.GET_ITEMS_DATA, { method: "GET" });
+  const [searchParams] = useSearchParams();
+
+  const { data: itemsAllData, loading: itemsAllLoading, error: itemsAllError, refetch:reloadAllData } =
+    useApi<any[]>(`${PATH.GET_ITEMS_DATA}/all`, { method: "GET" });
 
   const { data: headersData, loading: headersLoading, error: headersError } =
     useApi<any[]>(PATH.GET_CONFIG_HEADER + '/items', { method: "GET" });
@@ -35,11 +37,12 @@ const ItemList: React.FC = () => {
   const { data:Settings, loading:SettingsLoading, error:SettingsError, refetch: SettingsRefetch } = 
     useApi<any[]>(`${PATH.USER_SETTINGS}/${CookieService.get('user_id')}`, { method: "PUT", autoFetch: false });
   
-  const { data:DeleteData, loading:DeleteLoading, error:DeleteError, refetch: DeleteRefetch } = 
+  const { data:DeleteData, error:DeleteError, refetch: DeleteRefetch } = 
     useApi<any[]>(`${PATH.GET_ITEMS_DATA}`, { method: "DELETE", autoFetch: false });
 
   const [units, setUnits] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [size, setSize] = useState<any[]>([]);
   const [wsConnected, setWsConnected] = useState(false);
 
   const { data: DropDownUnit } = useApi<any[]>(`${PATH.GET_DROP_DOWN}/Unit`, {
@@ -48,6 +51,11 @@ const ItemList: React.FC = () => {
   });
 
   const { data: DropDownCat } = useApi<any[]>(`${PATH.GET_DROP_DOWN}/Category`, {
+    method: "GET",
+    showOverlay: true
+  });
+
+  const { data: DropDownSize } = useApi<any[]>(`${PATH.GET_DROP_DOWN}/Size`, {
     method: "GET",
     showOverlay: true
   });
@@ -70,6 +78,29 @@ const ItemList: React.FC = () => {
 
   const userSettings = useSelector((state: RootState) => state.userSettings.settings);
 
+  const lastFetchRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const sortBy = searchParams.get("sortBy");
+    const direction = searchParams.get("direction");
+    if (!sortBy || !direction) return;
+    const key = `${sortBy}_${direction}`;
+    if (lastFetchRef.current === key) return;
+
+    lastFetchRef.current = key;
+    reloadAllData({
+      path: `?sortBy=${sortBy}&direction=${direction}`,
+    });
+  }, [searchParams, reloadAllData]);
+
+  useEffect(() => {
+    websocketService.ItemWsconnect('items');
+
+    return () => {
+      websocketService.disconnect();
+    };
+  }, []);
+
   useEffect(() => {
     if (DropDownUnit) {
       setUnits(
@@ -89,7 +120,17 @@ const ItemList: React.FC = () => {
         }))
       );
     }
-  }, [DropDownUnit, DropDownCat]);
+
+    if (DropDownSize) {
+      setSize(
+        DropDownSize.map((c) => ({
+          label: `${c.dropdownValue}`,
+          value: c.dropdownValue,
+          code: c.dropdownCode,
+        }))
+      );
+    }
+  }, [DropDownUnit, DropDownCat, DropDownSize]);
 
   // ============================================
   // 🔧 FIX: Helper to filter item by current visible fields
@@ -224,6 +265,12 @@ const ItemList: React.FC = () => {
       columnConfig.map((col: any) => [col.name, col])
     );
 
+    const optionsMap: Record<string, any[]> = {
+      Unit: units,
+      Category: categories,
+      Size: size,
+    };
+
     // Merge backend headers + localStorage config
     const formattedHeaders = headersData
       .map((header: any) => {
@@ -236,12 +283,7 @@ const ItemList: React.FC = () => {
           type: header.type,
           isEditable: header.isEditable,
           isVisible: stored?.isVisible !== undefined ? stored.isVisible : true,
-          options:
-            header.headerName === "Unit"
-              ? units
-              : header.headerName === "Category"
-              ? categories
-              : header.options || [],
+          options: optionsMap[header.headerName] ?? header.options ?? [],
         };
       })
       // Filter out hidden columns
@@ -276,62 +318,67 @@ const ItemList: React.FC = () => {
     }
   }, [Settings, SettingsError, DeleteData, DeleteError, deleteLoad, notificationApi]);
 
-  // ✅ Load initial data ONCE + process buffered WebSocket events
+  // ✅ FIXED: Load initial data with proper dependency tracking
   useEffect(() => {
-    if (!itemsData || !tableHeader.length) return;
+    // Don't process if headers aren't ready
+    if (!tableHeader.length) return;
+
+    // Determine which data source to use
+    const sourceData = itemsAllData;
+    
+    // Don't process if no data available
+    if (!sourceData || sourceData.length === 0) {
+      console.log("No source data available yet");
+      return;
+    }
 
     const fields = tableHeader.map(h => h.field);
 
-    const filtered = itemsData.map(item => {
-      const out: any = {};
-      fields.forEach(field => out[field] = item[field]);
-      out.itemCode = item.itemCode;
+    const filtered = sourceData.map(item => {
+      const out: any = { itemCode: item.itemCode };
+      fields.forEach(field => {
+        out[field] = item[field];
+      });
       return out;
     });
 
-    // Initial load
+    setTableData(filtered);
+    
+    // Mark initial data as loaded
     if (!initialDataLoaded.current) {
-      setTableData(filtered);
       initialDataLoaded.current = true;
-      // 🔧 FIX: Process buffered WebSocket events
+
+      // Process any buffered WebSocket events
       if (wsEventBuffer.current.length > 0) {
         wsEventBuffer.current.forEach(event => {
-          if (event.type === 'create') {
+          if (event.type === "create") {
             const filteredPayload = filterItemByHeaders(event.payload);
             setTableData(prev => {
-              if (prev.some(item => item.itemCode === event.payload.itemCode)) return prev;
+              if (prev.some(i => i.itemCode === event.payload.itemCode)) {
+                return prev;
+              }
               return [...prev, filteredPayload];
             });
-          } else if (event.type === 'update') {
+          } else if (event.type === "update") {
             const filteredPayload = filterItemByHeaders(event.payload);
-            setTableData(prev => 
-              prev.map(item =>
-                item.itemCode === event.payload.itemCode
-                  ? { ...item, ...filteredPayload }
-                  : item
+            setTableData(prev =>
+              prev.map(i =>
+                i.itemCode === event.payload.itemCode
+                  ? { ...i, ...filteredPayload }
+                  : i
               )
             );
-          } else if (event.type === 'delete') {
-            setTableData(prev => prev.filter(i => i.itemCode !== event.payload));
+          } else if (event.type === "delete") {
+            setTableData(prev =>
+              prev.filter(i => i.itemCode !== event.payload)
+            );
           }
         });
         wsEventBuffer.current = [];
       }
-      
-      return;
     }
+  }, [itemsAllData, itemsAllLoading, tableHeader]); // ✅ Fixed dependencies
 
-    // 🔧 FIX: Merge API response with current data (for manual refresh scenarios)
-    setTableData(prev => {
-      const map = new Map(prev.map(r => [r.itemCode, r]));
-      filtered.forEach(r => {
-        const existing = map.get(r.itemCode);
-        map.set(r.itemCode, { ...(existing || {}), ...r });
-      });
-      return Array.from(map.values());
-    });
-
-  }, [itemsData, tableHeader]);
 
   const OnEditChange = (updateData: any) => {
     itemUpdateSubject.next(updateData);
@@ -340,12 +387,12 @@ const ItemList: React.FC = () => {
     }
   };
 
-  const handleNew = () => navigate("/item/new");
+  const handleNew = () => navigate("/item/create");
 
-  if (itemsError || headersError)
+  if (itemsAllError || headersError)
     return (
       <div style={{ color: "red", whiteSpace: "pre-wrap" }}>
-        {JSON.stringify(itemsError || headersError, null, 2)}
+        {JSON.stringify(itemsAllError || headersError, null, 2)}
       </div>
     );
 
@@ -418,7 +465,7 @@ const ItemList: React.FC = () => {
           delete pendingDeleteConfirmations.current[code];
         });
         // fallback reload to ensure consistency
-        await reloadData();
+        await reloadAllData();
       }
       closeDeleteDialog();
     } catch (err) {
@@ -465,14 +512,15 @@ const ItemList: React.FC = () => {
         </div>
       )}
 
-      {(itemsLoading || headersLoading) && <SkeletonLoader />}
-
-      {tableHeader.length && tableData.length ? (
+      {tableData.length > 0 && (
         <Table
-          key={JSON.stringify(tableData.map(r => r.itemCode))}
           TableName="itemTable"
+          Idlinkpath="item"
+          idkey="itemId"
           TableHeader={tableHeader}
           TableData={tableData}
+          HeaderLoading={headersLoading}
+          DataLoading={itemsAllLoading}
           checkbox={true}
           selectedRows={selectedRows}
           onSelectionChange={(rows) => {
@@ -480,14 +528,23 @@ const ItemList: React.FC = () => {
             setDeleteDialogOpen(rows.length > 0);
           }}
           onRowChange={(rowIndex, updatedRow) => OnEditChange(updatedRow)}
+          onSortClear={() => reloadAllData()}
         />
-      ) : (
-        !itemsLoading && !headersLoading && 
+      )}
+
+      {!itemsAllLoading &&
+      !headersLoading &&
+      tableHeader.length > 0 &&
+      tableData.length === 0 && (
         <Result
           status="404"
           title="NO PRODUCTS FOUND"
           subTitle=""
-          extra={<PButton type="primary" onClick={handleNew}>Create</PButton>}
+          extra={
+            <PButton type="primary" onClick={handleNew}>
+              Create
+            </PButton>
+          }
         />
       )}
 

@@ -1,9 +1,11 @@
-import axios, { AxiosInstance, } from 'axios';
+import axios, { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
 import { getAuthToken } from '../utils/tokenManager';
+import { SERVER_URL } from '../constants/url.constant';
+
 
 // Create a single Axios instance
 const httpClient: AxiosInstance = axios.create({
-  baseURL: 'http://localhost:8080/',
+  baseURL: SERVER_URL.HTTP,
   timeout: 15000,
   headers: {
     "Content-Type": "application/json;charset=utf-8",
@@ -21,7 +23,7 @@ httpClient.interceptors.response.use(
 
 // // 🔹 Request Interceptor
 httpClient.interceptors.request.use(
-  (config: AxiosRequestConfig) => {
+  (config: InternalAxiosRequestConfig) => {
     const token = getAuthToken();
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;

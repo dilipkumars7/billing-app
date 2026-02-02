@@ -37,6 +37,9 @@ const ViewSettingsList: React.FC<Props> = ({ columns, onChange }) => {
     onChange(updated);
   };
 
+  const isColumnLocked = (headerName: string) =>
+  /code|name/i.test(headerName);
+
   return (
     <DragDropContext onDragEnd={onDragEnd}>
       <Droppable
@@ -73,6 +76,7 @@ const ViewSettingsList: React.FC<Props> = ({ columns, onChange }) => {
                       <Checkbox
                         checked={col.isVisible}
                         onChange={() => toggleVisibility(index)}
+                        disabled={isColumnLocked(col.headerName)}
                       />
                       <span className="text-sm">{col.headerName}</span>
                     </div>

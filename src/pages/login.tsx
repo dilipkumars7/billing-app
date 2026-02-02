@@ -64,11 +64,6 @@ export default function Login() {
     { method: 'POST', autoFetch: false }
   );
 
-  const { data:UserData, loading:UserLoading, error:UserError, refetch:userRefetch } = useApi<any>(
-    PATH.USER_SETTINGS,
-    { method: 'GET', autoFetch: false }
-  );
-
   const dispatch = useDispatch();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,11 +111,10 @@ export default function Login() {
           showProgress: true,
           pauseOnHover: true,
         });
-        userRefetch({
-          path:`/${data.userCode}`,
-          method: "GET"
-        });
       }, 900);
+      setTimeout(()=>{
+        userRefetch();
+      }, 2000)
     }
     if (error) {
       notificationApi.error({
@@ -130,22 +124,8 @@ export default function Login() {
         pauseOnHover: true,
       });
     }
-    if(UserError){
-      notificationApi.error({
-        message: UserError.error,
-        description: `${UserError?.message || 'Login failed. Please try again.'}`,
-        showProgress: true,
-        pauseOnHover: true,
-      });
-    }
-  }, [data, error, UserError]);
+  }, [data, error]);
 
-  useEffect(() => {
-    if (UserData) {
-      console.log('UserData:', UserData);
-      dispatch(setUserSettings(UserData));
-    }
-  }, [UserData, dispatch]);
 
   useEffect(()=>{
     const activeSlide = document.querySelector(`.swiper-slide-active`);

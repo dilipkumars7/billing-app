@@ -1,5 +1,5 @@
-  // src/services/websocketService.ts
   import { Client, IMessage } from '@stomp/stompjs';
+import { SERVER_URL } from '../constants/url.constant';
 
   export type ItemUpdateCallback = (item: any) => void;
   export type ItemDeleteCallback = (itemCode: string) => void;
@@ -18,20 +18,20 @@
     private onConnectionChangeCallbacks: ((connected: boolean) => void)[] = [];
 
     constructor() {
-      this.connect();
+      // this.ItemWsconnect();
     }
 
     /**
      * Establish WebSocket connection using native WebSocket (no SockJS)
      */
-    connect() {
+    ItemWsconnect(path:string) {
       if (this.connected) {
         return;
       }
       // Create STOMP client with NATIVE WebSocket
       this.client = new Client({
         // For production, use: wss://yourdomain.com/ws/items/websocket
-        brokerURL: 'ws://localhost:8080/ws/items', // Note: /websocket suffix for native
+        brokerURL: SERVER_URL.WS+path, // Note: /websocket suffix for native
         
         debug: (str) => {
           // console.log('[STOMP Debug]:', str);
@@ -105,7 +105,6 @@
       this.reconnectAttempts++;
       
       setTimeout(() => {
-        this.connect();
       }, this.reconnectDelay * this.reconnectAttempts);
     }
 

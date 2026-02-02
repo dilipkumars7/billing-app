@@ -26,7 +26,7 @@ export const tableContainer = css`
 
 export const tableHeader = css`
   display: grid;
-  grid-template-columns: 40px 250px 250px 170px 150px 150px 150px;
+  grid-template-columns: 40px 250px 250px 170px 150px 150px 150px 150px 150px 150px;
   background: #f9fafb;
   padding: 12px 10px;
   border-bottom: 1px solid #e5e7eb;
