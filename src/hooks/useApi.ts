@@ -18,7 +18,7 @@ interface RefetchOptions<TRequest = any> extends Partial<UseApiOptions<TRequest>
 }
 
 interface UseApiResponse<TResponse, TRequest> {
-  data: TResponse | null;
+  data: TResponse | null | any;
   loading: boolean;
   error: any | null;
   refetch: (overrideOptions?: RefetchOptions<TRequest>) => Promise<TResponse | null>;

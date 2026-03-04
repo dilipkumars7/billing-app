@@ -5,6 +5,7 @@ import { Button, Dropdown, MenuProps } from 'antd'
 import { CookieService } from '../store/Cookie';
 import { PiUserCircleCheckDuotone, PiGearFineDuotone } from "react-icons/pi";
 import { BiLogOutCircle } from "react-icons/bi";
+import { RiSettings3Line } from "react-icons/ri";
 
 interface NavbarProps {
   isOpen: boolean;
@@ -78,16 +79,23 @@ export default function Navbar({ isOpen, onToggle }: NavbarProps) {
             type="text"
             icon={isOpen ? <GoSidebarCollapse size={20} /> : <GoSidebarExpand size={20} />}
             onClick={handleToggleClick}
+            className='mt-1'
           />
-          <span className='text-lg font-bold'>Logo</span>
+          <div className='flex items-center select-none gap-1 justify-center'>
+            <img src='../../public/1771307422_favicons/android-chrome-192x192.png' width="27x" />
+            <span className='text-[17px] font-bold mt-[2.5px]'>Billing</span>
+          </div>
         </div>
         <div className='flex items-center gap-4'>
-          <button className='font-bold'>Home</button>
+          {/* <button className='font-bold'>Home</button> 
           <button className='font-bold'>About</button>
-          <button className='font-bold'>Create</button>
+          <button className='font-bold'>Create</button> */}
         </div>
       </div>
-      <div className='flex items-center h-full gap-4'>
+      <div className='flex items-center h-full gap-1'>
+        <Button type="text" style={{padding:'7px'}}>
+          <RiSettings3Line size={24} />
+        </Button>
         <Dropdown
           menu={{ items: generateMenuItems() }}
           trigger={["click"]}

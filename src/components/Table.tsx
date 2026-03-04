@@ -77,7 +77,10 @@ const Cell = styled.div<{ isHovered: boolean; isHeaderCell: boolean; isCheckbox?
     `display: flex;
     align-items: center;
     background-color: #F8F8F8;
-    Height: 43px;
+    Height: 40px;
+    color: #505258;
+    font-size: 13.5px;
+    padding:2px;
     `}
   ${(props) =>
     props.isCheckbox &&
@@ -100,7 +103,7 @@ const Cell = styled.div<{ isHovered: boolean; isHeaderCell: boolean; isCheckbox?
       background: #fff;
     `}
   position: relative;
-  padding: 9px;
+  padding: 6px;
   border-left: 1px solid #091E4224;
   border-bottom: 1px solid #091E4224;
   overflow: hidden;
@@ -108,6 +111,8 @@ const Cell = styled.div<{ isHovered: boolean; isHeaderCell: boolean; isCheckbox?
   text-align: left;
   box-sizing: border-box;
   flex-shrink: 0;
+  max-height: 40px;
+  text-overflow: ellipsis;
   min-width: ${(props) => props.isCheckbox ? "50px" : "150px"};
   text-overflow: ellipsis;
   border-right: ${(props) =>

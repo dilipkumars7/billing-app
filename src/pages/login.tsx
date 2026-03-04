@@ -104,6 +104,7 @@ export default function Login() {
       CookieService.set('role', data.userRole);
       CookieService.set('user_name', data.userName);    
       CookieService.set('user_id', data.userCode);
+      CookieService.set('companyId', data.userCompany);
       setTimeout(() => {
         notificationApi.success({
           message: `Hey ${data.userName}`,

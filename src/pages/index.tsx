@@ -12,11 +12,12 @@ import ItemGet from "./item/getId";
 import InvoiceList from "./invoices/invoiceList";
 import InvoicegetId from "./invoices/getId";
 import InvoiceCreate from "./invoices/new";
-import CoustomerList from "./customers/List";
-import CoustomerCreate from "./customers/create";
-import CoustomerID from "./customers/getID";
+import CustomerList from "./customers/List";
+import CustomerCreate from "./customers/create";
+import CustomerID from "./customers/getID";
 import Insights from "./insights/Insights";
 import PurchaseList from "./purchase/PurchaseList";
+import PurchaseCreate from "./purchase/new";
 import SupplierList from "./supplier/supplierList";
 import SupplierNew from "./supplier/new";
 
@@ -38,10 +39,10 @@ export default function AppRoutes() {
           <Route path="insights">
             <Route index element={<Insights />} />
           </Route>
-          
+
           <Route path="item">
-            <Route index element={<ItemList />} />     
-            <Route path="create" element={<ItemNew />} />      
+            <Route index element={<ItemList />} />
+            <Route path="create" element={<ItemNew />} />
             <Route path=":id" element={<ItemGet />}>
               <Route path="history" element={<ItemGet />} />
               <Route path="transactions" element={<ItemGet />} />
@@ -49,28 +50,28 @@ export default function AppRoutes() {
           </Route>
 
           <Route path="invoice">
-            <Route index element={<InvoiceList />} />     
-            <Route path="create" element={<InvoiceCreate />} />      
-            <Route path=":id" element={<InvoicegetId />} />        
+            <Route index element={<InvoiceList />} />
+            <Route path="create" element={<InvoiceCreate />} />
+            <Route path=":id" element={<InvoicegetId />} />
           </Route>
 
           <Route path="customer">
-            <Route index element={<CoustomerList />} />     
-            <Route path="create" element={<CoustomerCreate />} />      
-            <Route path=":id" element={<CoustomerID />} />        
+            <Route index element={<CustomerList />} />
+            <Route path="create" element={<CustomerCreate />} />
+            <Route path=":id" element={<CustomerID />} />
           </Route>
 
           <Route path="supplier">
-            <Route index element={<SupplierList />} />     
-            <Route path="create" element={<SupplierNew />} />      
+            <Route index element={<SupplierList />} />
+            <Route path="create" element={<SupplierNew />} />
             <Route path=":id" element={<div>Supplier Get ID</div>} />
           </Route>
 
           <Route path="purchase">
-            <Route index element={<PurchaseList />} />     
-            <Route path="create" element={<div>Purchase Create</div>} />
+            <Route index element={<PurchaseList />} />
+            <Route path="create" element={<PurchaseCreate />} />
           </Route>
-          
+
         </Route>
       </Route>
 

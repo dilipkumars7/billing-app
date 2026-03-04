@@ -27,7 +27,7 @@ const SupplierList: React.FC = () => {
   const [searchParams] = useSearchParams();
 
   const { data: suppliersData, loading: suppliersLoading, error: suppliersError, refetch:reloadData } =
-      useApi<any[]>(`${PATH.SUPPLIERS_DATA}/all`, { method: "GET" });
+      useApi<any[]>(`${PATH.SUPPLIERS_DATA}/all/${CookieService.get('companyId')}`, { method: "GET" });
   
   const { data: headersData, loading: headersLoading, error: headersError } =
     useApi<any[]>(PATH.GET_CONFIG_HEADER + '/suppliers', { method: "GET" });
@@ -289,12 +289,20 @@ const SupplierList: React.FC = () => {
             </Tooltip>
           </div>
         </div>
-      )}
+        )
+      }
+
+      {suppliersLoading &&
+        headersLoading &&
+        (
+          <SkeletonLoader></SkeletonLoader>
+        )
+      }
 
       {tableData.length > 0 && (
         <Table
-          TableName="itemTable"
-          Idlinkpath="item"
+          TableName="supplierTable"
+          Idlinkpath="supplier"
           idkey="itemId"
           TableHeader={tableHeader}
           TableData={tableData}

@@ -12,6 +12,85 @@ import { IoTrashBinSharp } from "react-icons/io5";
 import { MdAddBox } from "react-icons/md";
 import '../../css/common.css';
 import styled from "@emotion/styled";
+import { Data } from '../../constants/IndianStateDistrictsData';
+
+const Container = styled.div`
+  display: grid;
+  grid-template-rows: 40px 1fr 60px;
+  height: calc(100vh - 65px);
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+`;
+
+const Header = styled.div`
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  border-bottom: 1px solid #e8e8e8;
+`;
+
+const Content = styled.div`
+  background: #fff;
+  display: unset;
+  align-items: center;
+  width: 100%;
+  overflow-y: auto;
+  padding: 10px 40px;
+`;
+
+const Footer = styled.div`
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: left;
+  border-top: 1px solid #e8e8e8;
+  padding: 23px 20px;
+  gap: 10px;
+`;
+
+const FormUxScope = styled.div`
+  .ant-input,
+  .ant-input-number-input,
+  .ant-input-affix-wrapper input,
+  .ant-select-selection-search-input {
+    color: #1f2937;
+    caret-color: #111827;
+  }
+
+  .ant-input,
+  .ant-input-affix-wrapper,
+  .ant-input-number,
+  .ant-select-selector {
+    background-color: #fff;
+  }
+
+  .ant-input:focus,
+  .ant-input-focused,
+  .ant-input-affix-wrapper:focus-within,
+  .ant-input-number:focus-within,
+  .ant-select-focused .ant-select-selector {
+    border-color: #1677ff !important;
+    box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.18) !important;
+  }
+
+  .ant-form-item-has-error .ant-input,
+  .ant-form-item-has-error .ant-input-affix-wrapper,
+  .ant-form-item-has-error .ant-input-number,
+  .ant-form-item-has-error .ant-select-selector {
+    background-color: #fff;
+  }
+
+  .ant-form-item-has-error .ant-input,
+  .ant-form-item-has-error .ant-input-number-input,
+  .ant-form-item-has-error .ant-input-affix-wrapper input,
+  .ant-form-item-has-error .ant-select-selection-search-input {
+    color: #1f2937;
+    caret-color: #111827;
+  }
+`;
 
 export default function SupplierNew() {
   const { control, handleSubmit, formState: { errors }, reset, watch } = useForm({
@@ -28,13 +107,27 @@ export default function SupplierNew() {
         addressLine1: '',
         addressLine2: '',
         city: '',
+        district: '',
+        country: 'India',
         state: '',
         pincode: '',
       },
+      companyId: CookieService.get('companyId') || '',
     }
   })
 
   const notificationApi = useNotification();
+  const selectedState = watch("supplierAddress.state");
+  const [districtOptions, setDistrictOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (selectedState) {
+      const stateObj = Data.states.find((s) => s.state === selectedState);
+      setDistrictOptions(stateObj?.districts || []);
+    } else {
+      setDistrictOptions([]);
+    }
+  }, [selectedState]);
 
   // ⭐ API Hook for POST
   // const createItemApi = useApi(PATH.GET_ITEMS_DATA, { method: 'POST' }, false)
@@ -88,48 +181,11 @@ export default function SupplierNew() {
     wrapperCol:{ span: 16 }
   }
 
-  const Container = styled.div`
-    display: grid;
-    grid-template-rows: 40px 1fr 60px;
-    height: calc(100vh - 65px);
-    width: 100%;
-    border-radius: 12px;
-    overflow: hidden;
-  `;
-
-  const Header = styled.div`
-    background: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-    border-bottom: 1px solid #e8e8e8;
-  `;
-
-  const Content = styled.div`
-    background: #fff;
-    display: unset;
-    align-items: center;
-    width: 100%;
-    overflow-y: auto;
-    padding: 10px 40px;
-  `;
-
-  const Footer = styled.div`
-    background: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: left;
-    border-top: 1px solid #e8e8e8;
-    padding: 23px 20px;
-    gap: 10px;
-  `;
-
-
   return (
     <Container>
       <Header>Create Supplier</Header>
       <Content>
+        <FormUxScope>
         <Form {...layout} labelAlign='left'>
 
           {/* NAME */}
@@ -272,6 +328,75 @@ export default function SupplierNew() {
             />
           </Form.Item>
 
+          {/* STATE */}
+          <Form.Item
+            label="State"
+            required
+            validateStatus={errors?.supplierAddress?.state ? 'error' : ''}
+            help={
+              <FormErrorMessage
+                message={errors?.supplierAddress?.state?.message}
+              />
+            }
+          >
+            <Controller
+              name="supplierAddress.state"
+              control={control}
+              rules={{ required: 'State is required' }}
+              render={({ field }) => (
+                <Select
+                  size="large"
+                  {...field}
+                  placeholder="Select State"
+                  showSearch
+                  options={Data.states.map((s) => ({
+                    label: s.state,
+                    value: s.state,
+                  }))}
+                  onChange={(value) => {
+                    field.onChange(value);
+                    // Reset district whenever state changes
+                    reset({
+                      ...watch(),
+                      supplierAddress: { ...watch().supplierAddress, district: '' }
+                    });
+                  }}
+                />
+              )}
+            />
+          </Form.Item>
+
+           {/* DISTRICT */}
+          <Form.Item
+            label="District"
+            required
+            validateStatus={errors?.supplierAddress?.district ? 'error' : ''}
+            help={
+              <FormErrorMessage
+                message={errors?.supplierAddress?.state?.message}
+              />
+            }
+          >
+            <Controller
+              name="supplierAddress.district"
+              control={control}
+              rules={{ required: 'District is required' }}
+              render={({ field }) => (
+                <Select
+                  size="large"
+                  {...field}
+                  placeholder="Select District"
+                  showSearch
+                  options={districtOptions.map((district) => ({
+                    label: district,
+                    value: district,
+                  }))}
+                  onChange={(value) => field.onChange(value)}
+                />
+              )}
+            />
+          </Form.Item>
+
           {/* CITY */}
           <Form.Item
             label="City"
@@ -293,26 +418,6 @@ export default function SupplierNew() {
             />
           </Form.Item>
 
-          {/* STATE */}
-          <Form.Item
-            label="State"
-            required
-            validateStatus={errors?.supplierAddress?.state ? 'error' : ''}
-            help={
-              <FormErrorMessage
-                message={errors?.supplierAddress?.state?.message}
-              />
-            }
-          >
-            <Controller
-              name="supplierAddress.state"
-              control={control}
-              rules={{ required: 'State is required' }}
-              render={({ field }) => (
-                <Input size="large" {...field} placeholder="State" />
-              )}
-            />
-          </Form.Item>
 
           {/* PINCODE */}
           <Form.Item
@@ -347,6 +452,7 @@ export default function SupplierNew() {
           </Form.Item>
 
         </Form>
+        </FormUxScope>
       </Content>
       <Footer>
         <Button variant="solid" color="primary" className="w-[150px]" htmlType="submit" loading={loading} onClick={handleSubmit(onSubmit)}>

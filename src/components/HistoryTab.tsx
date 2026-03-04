@@ -2,6 +2,7 @@ import styled from "@emotion/styled";
 import dayjs from "dayjs";
 import Avatar  from "./Avatar";
 import { Tag } from "antd";
+import { useMemo } from "react";
 
 const HistoryContainer = styled.div`
   display: flex;
@@ -62,9 +63,15 @@ export default function HistoryTab({ history }: { history: any[] }) {
     { label: "Size", prev: "previousSize", curr: "currentSize" }
   ];
 
+  const filteredHistory = useMemo(() => {
+    return (history || []).filter(
+      (h) => h.historyType === "CREATE" || h.historyType === "UPDATE"
+    );
+  }, [history]);
+
   return (
     <HistoryContainer>
-      {history.map((h) => (
+      {filteredHistory.map((h) => (
         <HistoryItem key={h.id}>
           <AvatarDiv>
             <Avatar name={h.updatedBy} size={31} />

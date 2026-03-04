@@ -13,8 +13,88 @@ import { MdAddBox } from "react-icons/md";
 import '../../css/common.css';
 import styled from "@emotion/styled";
 
+const Container = styled.div`
+  display: grid;
+  grid-template-rows: 40px 1fr 60px;
+  height: calc(100vh - 65px);
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+`;
+
+const Header = styled.div`
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  border-bottom: 1px solid #e8e8e8;
+`;
+
+const Content = styled.div`
+  background: #fff;
+  display: unset;
+  align-items: center;
+  width: 100%;
+  overflow-y: auto;
+  padding: 10px 40px;
+`;
+
+const Footer = styled.div`
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: left;
+  border-top: 1px solid #e8e8e8;
+  padding: 23px 20px;
+  gap: 10px;
+`;
+
+const FormUxScope = styled.div`
+  .ant-input,
+  .ant-input-number-input,
+  .ant-input-affix-wrapper input,
+  .ant-select-selection-search-input {
+    color: #1f2937;
+    caret-color: #111827;
+  }
+
+  .ant-input,
+  .ant-input-affix-wrapper,
+  .ant-input-number,
+  .ant-select-selector {
+    background-color: #fff;
+  }
+
+  .ant-input:focus,
+  .ant-input-focused,
+  .ant-input-affix-wrapper:focus-within,
+  .ant-input-number:focus-within,
+  .ant-select-focused .ant-select-selector {
+    border-color: #1677ff !important;
+    box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.18) !important;
+  }
+
+  .ant-form-item-has-error .ant-input,
+  .ant-form-item-has-error .ant-input-affix-wrapper,
+  .ant-form-item-has-error .ant-input-number,
+  .ant-form-item-has-error .ant-select-selector {
+    background-color: #fff;
+  }
+
+  .ant-form-item-has-error .ant-input,
+  .ant-form-item-has-error .ant-input-number-input,
+  .ant-form-item-has-error .ant-input-affix-wrapper input,
+  .ant-form-item-has-error .ant-select-selection-search-input {
+    color: #1f2937;
+    caret-color: #111827;
+  }
+`;
+
 export default function ItemNew() {
   const { control, handleSubmit, formState: { errors }, reset, watch } = useForm({
+    mode: 'onChange',
+    reValidateMode: 'onChange',
     defaultValues: {
       itemCode: '',
       name: '',
@@ -25,6 +105,7 @@ export default function ItemNew() {
       sellingPrice: 0,
       taxRate: 0,
       size: '',
+      companyId: CookieService.get('companyId') || '',
     }
   })
 
@@ -99,44 +180,6 @@ export default function ItemNew() {
     labelCol: { span: 6 },
     wrapperCol:{ span: 16 }
   }
-
-
-  const Container = styled.div`
-    display: grid;
-    grid-template-rows: 40px 1fr 60px;
-    height: calc(100vh - 65px);
-    width: 100%;
-    border-radius: 12px;
-    overflow: hidden;
-  `;
-
-  const Header = styled.div`
-    background: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-    border-bottom: 1px solid #e8e8e8;
-  `;
-
-  const Content = styled.div`
-    background: #fff;
-    display: unset;
-    align-items: center;
-    width: 100%;
-    overflow-y: auto;
-    padding: 10px 40px;
-  `;
-
-  const Footer = styled.div`
-    background: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: left;
-    border-top: 1px solid #e8e8e8;
-    padding: 23px 20px;
-    gap: 10px;
-  `;
 
   type DropdownItem = {
     label: string;
@@ -276,7 +319,7 @@ export default function ItemNew() {
 
 
 
-  const handleOpenModal = (type: "category" | "unit") => {
+  const handleOpenModal = (type: "category" | "unit" | "size") => {
     setModalType(type);
     resetDyn();     
     setOpenModal(true);
@@ -293,6 +336,7 @@ export default function ItemNew() {
     <Container>
       <Header>Create Item</Header>
       <Content>
+        <FormUxScope>
         <Form {...layout} labelAlign='left'>
 
           {/* NAME */}
@@ -370,12 +414,8 @@ export default function ItemNew() {
             <Controller
               name="quantity"
               control={control}
-              rules={{
-                required: 'Quantity is required',
-                min: { value: 1, message: 'Quantity must be at least 1' },
-              }}
               render={({ field }) => (
-                <InputNumber size="large" inputMode="numeric" {...field} min={1} style={{ width: '100%' }} suffix={`${selectedUnit}`} />
+                <InputNumber size="large" inputMode="numeric" {...field} style={{ width: '100%' }} suffix={`${selectedUnit}`} />
               )}
             />
           </Form.Item>
@@ -439,6 +479,7 @@ export default function ItemNew() {
           </Form.Item>
 
         </Form>
+        </FormUxScope>
       </Content>
       <Footer>
         <Button variant="solid" color="primary" className="w-[150px]" htmlType="submit" loading={loading} onClick={handleSubmit(onSubmit)}>
@@ -487,7 +528,7 @@ export default function ItemNew() {
 }
   
 
-function SelectFun(field:any, Items:any, onDelete:any, onAddNew: (type: string) => void, type: "category" | "unit") {
+function SelectFun(field:any, Items:any, onDelete:any, onAddNew: (type: string) => void, type: "category" | "unit" | "size") {
   return (
     <Select
       size="large"

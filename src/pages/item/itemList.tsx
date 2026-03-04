@@ -29,7 +29,7 @@ const ItemList: React.FC = () => {
   const [searchParams] = useSearchParams();
 
   const { data: itemsAllData, loading: itemsAllLoading, error: itemsAllError, refetch:reloadAllData } =
-    useApi<any[]>(`${PATH.GET_ITEMS_DATA}/all`, { method: "GET" });
+    useApi<any[]>(`${PATH.GET_ITEMS_DATA}/all/${CookieService.get('companyId')}`, { method: "GET" });
 
   const { data: headersData, loading: headersLoading, error: headersError } =
     useApi<any[]>(PATH.GET_CONFIG_HEADER + '/items', { method: "GET" });
@@ -511,6 +511,14 @@ const ItemList: React.FC = () => {
           </div>
         </div>
       )}
+
+      {itemsAllLoading &&
+      headersLoading &&
+      (
+        <SkeletonLoader></SkeletonLoader>
+      )
+      }
+
 
       {tableData.length > 0 && (
         <Table

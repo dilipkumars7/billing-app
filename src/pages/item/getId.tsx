@@ -8,6 +8,8 @@ import { IoClose } from 'react-icons/io5';
 import {QRCodeCanvas} from 'qrcode.react';
 import HistoryTab from '../../components/HistoryTab';
 import StickyBox from 'react-sticky-box';
+import { CookieService } from '../../store/Cookie';
+import TransactionTab from '../../components/TransactionTab';
 
 
 export default function ItemGet() {
@@ -146,7 +148,7 @@ export default function ItemGet() {
   `;
 
   const { data: itemsData, loading: itemsLoading, error: itemsError, refetch:reloadData } =
-      useApi<any[]>(PATH.GET_ITEMS_DATA, { method: "GET", showOverlay: true});
+      useApi<any[]>(`${PATH.GET_ITEMS_DATA}/all/${CookieService.get('companyId')}`, { method: "GET", showOverlay: true});
 
   const { data: itemsHistoryData, loading: itemsHistoryLoading, error: itemsHistoryError, refetch:refetchHistoryData } =
       useApi<any[]>(PATH.GET_ITEMS_DATA, { method: "GET", showOverlay: true, autoFetch: false});
@@ -162,7 +164,10 @@ export default function ItemGet() {
     }
   }, [itemsData])
 
+  const isManualSelect = useRef(false);
+
   const handleSelect = (itemCode:string) => {
+    // isManualSelect.current = true; 
     navigate(`/item/${itemCode}`, { replace: true });
   };
 
@@ -211,6 +216,11 @@ export default function ItemGet() {
     {
       key: '2',
       label: `Transactions`,
+      children: (!itemsHistoryLoading && itemsHistoryData) ? (
+        <TransactionTab history={itemsHistoryData} />
+      ) : (
+        "Loading transaction..."
+      ),
     },
     {
       key: '3',
@@ -222,6 +232,59 @@ export default function ItemGet() {
       ),
     }
   ]
+
+  const listContainerRef = useRef<HTMLDivElement | null>(null);
+  const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const scrollPositionRef = useRef(0);
+  const previousIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const container = listContainerRef.current;
+    if (!container) return;
+    const handleScroll = () => {
+      scrollPositionRef.current = container.scrollTop;
+    };
+    container.addEventListener("scroll", handleScroll);
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    const container = listContainerRef.current;
+    if (!container) return;
+    container.scrollTop = scrollPositionRef.current;
+  }, []);
+
+  useEffect(() => {
+    if (!id || !tableData.length) return;
+
+    const container = listContainerRef.current;
+    const node = itemRefs.current[id];
+
+    if (!container || !node) return;
+
+    const isNewSelection = previousIdRef.current !== id;
+
+    if (!isNewSelection) return; // 🚀 prevent unnecessary scroll
+
+    previousIdRef.current = id;
+
+    const nodeRect = node.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+
+    const isVisible =
+      nodeRect.top >= containerRect.top &&
+      nodeRect.bottom <= containerRect.bottom;
+
+    if (!isVisible) {
+      node.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }, [id, tableData]);
+
 
   const isAllSelected =
     tableData.length > 0 && selectedItems.size === tableData.length;
@@ -242,6 +305,9 @@ export default function ItemGet() {
   useEffect(() => {
     if (!id) return;
     if (location.pathname.endsWith("/history")) {
+      GetHistory();
+    }
+    if (location.pathname.endsWith("/transactions")) {
       GetHistory();
     }
   }, [location.pathname, id]);
@@ -302,12 +368,15 @@ export default function ItemGet() {
             </>
           )}
         </ColumnHeader>
-        <ColumnConent>
+        <ColumnConent ref={listContainerRef}>
           {tableData.map(item => {
             const checked = selectedItems.has(item.itemCode);
             return (
               <ColumnItem
                 key={item.itemCode}
+                ref={(el) => {
+                  itemRefs.current[item.itemCode] = el;
+                }}
                 data-selected={item.itemCode === id}
                 onClick={() => handleSelect(item.itemCode)}
               >

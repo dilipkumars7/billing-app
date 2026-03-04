@@ -6,6 +6,8 @@ import { PATH } from "../constants/app.constant";
 
 export const itemUpdateSubject = new Subject<any>();
 export const supplierUpdateSubject = new Subject<any>();
+export const purchaseUpdateSubject = new Subject<any>();
+export const customerUpdateSubject = new Subject<any>();
 
 // Function to call API (wrap fetch in RxJS "from")
 const updateItemRequest = (payload: any) => {
@@ -20,6 +22,18 @@ const updateSupplierRequest = (payload: any) => {
   );
 };
 
+const updatePurchaseRequest = (payload: any) => {
+  return from(
+    ApiService.put(`${PATH.PURCHASE_DATA}/${payload.purchaseCode}`, payload)
+  );
+};
+
+const updateCustomerRequest = (payload: any) => {
+  return from(
+    ApiService.put(`${PATH.CUSTOMERS_DATA}/${payload.customerCode}`, payload)
+  );
+};
+
 // Stream with debounce + switchMap (cancel previous requests)
 export const itemUpdateStream$ = itemUpdateSubject.pipe(
   debounceTime(1000),
@@ -28,6 +42,15 @@ export const itemUpdateStream$ = itemUpdateSubject.pipe(
 export const supplierUpdateStream$ = supplierUpdateSubject.pipe(
   debounceTime(1500),
   switchMap((data) => updateSupplierRequest(data))
+);
+export const purchaseUpdateStream$ = purchaseUpdateSubject.pipe(
+  debounceTime(1500),
+  switchMap((data) => updatePurchaseRequest(data))
+)
+
+export const customerUpdateStream$ = customerUpdateSubject.pipe(
+  debounceTime(1500),
+  switchMap((data) => updateCustomerRequest(data))
 );
 
 // Incoming updates from WebSocket (API → all clients)

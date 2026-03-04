@@ -50,7 +50,7 @@ const LayoutGrid = styled.div<{ isOpen: boolean }>`
     "navbar navbar"
     "sidebar main";
   grid-template-columns: ${({ isOpen }) => (isOpen ? "240px" : "0px")} 1fr;
-  grid-template-rows: 60px 1fr;
+  grid-template-rows: 47px 1fr;
   transition: grid-template-columns 0.3s ease-in-out;
 
 
@@ -75,6 +75,7 @@ const NavbarWrapper = styled.header`
   padding-inline-start: var(--sdk-space-150, 12px);
   -webkit-box-align: center;
   color: var(--sdk-text-high-emphasis, #172B4D);
+  height:47px;
 `;
 
 const Backdrop = styled.div`
