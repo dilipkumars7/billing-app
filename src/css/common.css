@@ -610,3 +610,7 @@ header {
 .delete-nonblocking-modal .ant-modal {
   pointer-events: auto;
 }
+
+:where(.css-dev-only-do-not-override-151uw82).ant-typography.ant-typography-link {
+  font-size: 12px !important;
+}

@@ -1,10 +1,9 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import Table from "../../components/Table";
 import { useApi } from "../../hooks/useApi";
 import { PATH } from "../../constants/app.constant";
 import SkeletonLoader from "../../components/SkeletonLoader";
 import Button from '@mui/joy/Button';
-import { Button as PButton, Result, Tag } from "antd";
 import Tooltip from '@mui/joy/Tooltip';
 import { IoSearchOutline } from "react-icons/io5";
 import { IoMdAddCircleOutline } from "react-icons/io";
@@ -19,15 +18,44 @@ import ViewSettingsList from "../../components/ViewSettingsList";
 import { CookieService } from "../../store/Cookie";
 import { IoClose } from "react-icons/io5";
 import { useNotification } from "../../components/provider/NotificationProvider";
+import {
+  Button as PButton, Result, Tag, Badge,
+  Tooltip as AntTooltip, Drawer, Select,
+  Slider, Divider as AntDivider,
+} from "antd";
+
+const PAGE_SIZE = 15;
 
 const CustomerList: React.FC = () => {
-
   const notificationApi = useNotification();
-
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const companyId = CookieService.get('companyId') || '';
 
-  const { data: customersData, loading: customersLoading, error: customersError, refetch: reloadData } =
-    useApi<any[]>(`${PATH.CUSTOMERS_DATA}/all/${CookieService.get('companyId')}`, { method: "GET" });
+  // ── Pagination state ──────────────────────────────────────────────────────
+  const [currentPage, setCurrentPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const allDataRef = useRef<any[]>([]);
+  const initialDataLoaded = useRef(false);
+
+  // ── Search state ──────────────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const {
+    data: customersPageData,
+    loading: customersPageLoading,
+    error: customersAllError,
+    refetch: reloadPageData,
+  } = useApi<{ content: any[]; totalElements: number; last: boolean }>(
+    `${PATH.CUSTOMERS_DATA}/all/${companyId}`,
+    { method: "GET" }
+  );
+
+  const { data: customersSearchData, loading: customersSearchLoading, error: customersSearchError, refetch: reloadSearchData } =
+    useApi<any[]>(`${PATH.CUSTOMERS_DATA}/search`, { method: "GET", autoFetch: false });
 
   const { data: headersData, loading: headersLoading, error: headersError } =
     useApi<any[]>(PATH.GET_CONFIG_HEADER + '/customers', { method: "GET" });
@@ -41,7 +69,6 @@ const CustomerList: React.FC = () => {
   const [openModal, setOpenModal] = useState(false);
   const [tableHeader, setTableHeader] = useState<any[]>([]);
   const [tableData, setTableData] = useState<any[]>([]);
-  const navigate = useNavigate();
   const [viewSettings, setViewSettings] = useState<any[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedRows, setSelectedRows] = useState<any[]>([]);
@@ -52,20 +79,39 @@ const CustomerList: React.FC = () => {
 
   const userSettings = useSelector((state: RootState) => state.userSettings.settings);
 
-  const lastFetchRef = useRef<string | null>(null);
+  const lastSortKeyRef = useRef<string | null>(null);
+
+  const resetPagination = useCallback(() => {
+    allDataRef.current = [];
+    setCurrentPage(0);
+    setHasMore(true);
+    setIsFetchingMore(false);
+    initialDataLoaded.current = false;
+  }, []);
 
   useEffect(() => {
     const sortBy = searchParams.get("sortBy");
     const direction = searchParams.get("direction");
-    if (!sortBy || !direction) return;
-    const key = `${sortBy}_${direction}`;
-    if (lastFetchRef.current === key) return;
+    const key = sortBy && direction ? `${sortBy}_${direction}` : null;
+    if (key === lastSortKeyRef.current) return;
+    lastSortKeyRef.current = key;
 
-    lastFetchRef.current = key;
-    reloadData({
-      path: `?sortBy=${sortBy}&direction=${direction}`,
-    });
-  }, [searchParams, reloadData]);
+    resetPagination();
+    const sortQuery = sortBy && direction ? `?page=0&size=${PAGE_SIZE}&sortBy=${sortBy}&direction=${direction}` : `?page=0&size=${PAGE_SIZE}`;
+    reloadPageData({ path: sortQuery });
+  }, [searchParams, reloadPageData, resetPagination]);
+
+  useEffect(() => {
+    if (!tableHeader.length) return;
+    if (allDataRef.current.length === 0 && !initialDataLoaded.current) {
+      const sortBy = searchParams.get("sortBy");
+      const direction = searchParams.get("direction");
+      const sortQuery = sortBy && direction
+        ? `?page=0&size=${PAGE_SIZE}&sortBy=${sortBy}&direction=${direction}`
+        : `?page=0&size=${PAGE_SIZE}`;
+      reloadPageData({ path: sortQuery });
+    }
+  }, [tableHeader, searchParams, reloadPageData]);
 
 
   useEffect(() => {
@@ -82,7 +128,7 @@ const CustomerList: React.FC = () => {
     };
 
     const storedSettingsRaw = localStorage.getItem("settingsConfig");
-    let storedSettings = {};
+    let storedSettings:any = {};
 
     try {
       storedSettings = storedSettingsRaw ? JSON.parse(storedSettingsRaw) : {};
@@ -105,7 +151,7 @@ const CustomerList: React.FC = () => {
     // Merge backend headers + localStorage config
     const formattedHeaders = headersData
       .map((header: any) => {
-        const stored:any = columnConfigMap.get(header.field);
+        const stored: any = columnConfigMap.get(header.field);
         return {
           headerName: header.headerName,
           field: header.field,
@@ -148,23 +194,101 @@ const CustomerList: React.FC = () => {
     }
   }, [Settings, SettingsError, DeleteData, DeleteError, deleteLoad, notificationApi]);
 
-  useEffect(() => {
-    if (!customersData || !tableHeader.length) return;
-
+  const applyHeaderFilter = useCallback((items: any[]) => {
+    if (!tableHeader.length) return items;
     const fields = tableHeader.map(h => h.field);
-    const formatted = customersData.map(item => {
+    return items.map(item => {
       const out: any = {};
-      fields.forEach(field => {
-        out[field] = item[field];
-      });
+      fields.forEach(field => { out[field] = item[field]; });
       out.customerCode = item.customerCode;
       return out;
     });
-    setTableData(formatted);
-  }, [customersData, tableHeader])
+  }, [tableHeader]);
+
+  useEffect(() => {
+    if (!customersPageData || isSearchMode) return;
+
+    const incoming = customersPageData.content ?? (Array.isArray(customersPageData) ? customersPageData : []);
+    const isLastPage: boolean = customersPageData.last ?? (incoming.length < PAGE_SIZE);
+
+    const filtered = applyHeaderFilter(incoming);
+
+    const existingCodes = new Set(allDataRef.current.map((r: any) => r.purchaseCode));
+    const newItems = filtered.filter((item: any) => !existingCodes.has(item.purchaseCode));
+
+    allDataRef.current = [...allDataRef.current, ...newItems];
+    setTableData([...allDataRef.current]);
+
+    setHasMore(!isLastPage);
+    setIsFetchingMore(false);
+    initialDataLoaded.current = true;
+  }, [customersPageData, isSearchMode, applyHeaderFilter]);
+
+  useEffect(() => {
+    if (!isSearchMode) return;
+
+    if (customersSearchError) {
+      notificationApi.error({
+        message: 'Search failed',
+        description: (customersSearchError as any)?.message || 'Could not fetch search results.',
+      });
+      setIsSearchMode(false);
+      setTableData([...allDataRef.current]);
+      return;
+    }
+
+    if (customersSearchData !== undefined && customersSearchData !== null) {
+      setTableData(applyHeaderFilter(customersSearchData));
+    }
+  }, [customersSearchData, customersSearchError, isSearchMode, notificationApi, applyHeaderFilter]);
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+
+    if (!value.trim()) {
+      setIsSearchMode(false);
+      setTableData([...allDataRef.current]);
+      return;
+    }
+
+    debounceTimer.current = setTimeout(() => {
+      setIsSearchMode(true);
+      reloadSearchData({
+        path: `?q=${encodeURIComponent(value.trim())}&companyId=${encodeURIComponent(companyId)}`,
+      });
+    }, 350);
+  }, [companyId, allDataRef, reloadSearchData]);
+
+  const clearSearch = useCallback(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    setSearchQuery('');
+    setIsSearchMode(false);
+    setTableData([...allDataRef.current]);
+  }, []);
+
+  useEffect(() => () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); }, []);
+
+  const loadNextPage = useCallback(() => {
+    if (!hasMore || isFetchingMore || isSearchMode || customersPageLoading) return;
+
+    setIsFetchingMore(true);
+    const nextPage = currentPage + 1;
+    setCurrentPage(nextPage);
+
+    const sortBy = searchParams.get("sortBy");
+    const direction = searchParams.get("direction");
+    const sortQuery = sortBy && direction
+      ? `?page=${nextPage}&size=${PAGE_SIZE}&sortBy=${sortBy}&direction=${direction}`
+      : `?page=${nextPage}&size=${PAGE_SIZE}`;
+
+    reloadPageData({ path: sortQuery });
+  }, [hasMore, isFetchingMore, isSearchMode, customersPageLoading, currentPage, searchParams, reloadPageData]);
 
   const optionsMap: Record<string, any[]> = {
-    customerType:[{label:"Business", value:"Business"}, {label:"Individual", value:"Individual"}]
+    customerType: [{ label: "Business", value: "Business" }, { label: "Individual", value: "Individual" }]
   };
 
   useEffect(() => {
@@ -173,20 +297,20 @@ const CustomerList: React.FC = () => {
     const savedOrder = stored?.tableRowOrder?.customerTable || [];
     const map = new Map(savedOrder.map((c: any) => [c.name, c]));
     const merged = headersData.map((h: any) => {
-      const saved:any = map.get(h.field);
+      const saved: any = map.get(h.field);
       return {
         name: h.field,
         headerName: h.headerName,
         isVisible: saved?.isVisible ?? true,
         width: saved?.width ?? 150,
-        
+
       };
     });
     const ordered = savedOrder.length
       ? savedOrder
-        .map((s: any) => merged.find((m) => m.name === s.name))
+        .map((s: any) => merged.find((m:any) => m.name === s.name))
         .filter(Boolean)
-        .concat(merged.filter((m) => !map.has(m.name)))
+        .concat(merged.filter((m:any) => !map.has(m.name)))
       : merged;
     setViewSettings(ordered);
   }, [openModal, headersData]);
@@ -234,7 +358,8 @@ const CustomerList: React.FC = () => {
           delete pendingDeleteConfirmations.current[code];
         });
         // fallback reload to ensure consistency
-        await reloadData();
+        resetPagination();
+        reloadPageData({ path: `?page=0&size=${PAGE_SIZE}` });
       }
       closeDeleteDialog();
     } catch (err) {
@@ -259,6 +384,7 @@ const CustomerList: React.FC = () => {
     customerUpdateSubject.next(updateData);
     if (updateData?.customerCode) {
       setTableData(prev => prev.map(r => r.customerCode === updateData.customerCode ? { ...r, ...updateData } : r));
+      allDataRef.current = allDataRef.current.map(r => r.customerCode === updateData.customerCode ? { ...r, ...updateData } : r);
     }
   };
 
@@ -267,41 +393,41 @@ const CustomerList: React.FC = () => {
 
   return (
     <div className="p-[12px]">
-      {tableHeader.length!=0 && tableData.length!=0 && (
+      {tableHeader.length != 0 && (
         <div className="flex items-center justify-between px-1 py-2">
           <div className="flex items-center w-[15rem] pr-3 gap-2 bg-white border-gray-500/30 border-2 hover:border-[#357DE8] focus-within:border-[#357DE8] h-[39px] rounded-[5px] overflow-hidden">
             <input
               className="w-full h-full pl-5 outline-none placeholder-gray-500 text-sm"
               placeholder="Search for Customers"
               type="text"
+              value={searchQuery}
+              onChange={handleSearchChange}
             />
-            <IoSearchOutline size={25} color="#6a7282" />
+            {isSearchMode && customersSearchLoading
+              ? <span className="pr-1 text-gray-400 text-xs animate-pulse">…</span>
+              : searchQuery
+                ? <IoClose size={20} color="#6a7282" className="cursor-pointer flex-shrink-0 mr-1" onClick={clearSearch} />
+                : <IoSearchOutline size={25} color="#6a7282" className="flex-shrink-0" />
+            }
           </div>
 
           <div className="flex gap-2 items-center">
 
-            <Tooltip title="Add Customer" variant="solid" placement="top">
-              <Button size="sm" onClick={handleNew}>
-                <IoMdAddCircleOutline size={25} />
-              </Button>
-            </Tooltip>
+            <AntTooltip title="Create Customer">
+              <PButton variant="solid" color="primary" onClick={handleNew}><IoMdAddCircleOutline size={25} /></PButton>
+            </AntTooltip>
 
-            <Tooltip title="View Settings" variant="solid" placement="top">
-              <Button size="sm" variant="outlined" onClick={() => { setOpenModal(true) }}>
-                <LuSettings2 size={20} />
-              </Button>
-            </Tooltip>
+            <AntTooltip title="View Settings">
+              <PButton variant="outlined" onClick={() => setOpenModal(true)}><LuSettings2 size={20} /></PButton>
+            </AntTooltip>
           </div>
         </div>
-        )
+      )
       }
 
-      {customersLoading &&
-        headersLoading &&
-        (
-          <SkeletonLoader></SkeletonLoader>
-        )
-      }
+      {customersPageLoading && !initialDataLoaded.current && headersLoading && (
+        <SkeletonLoader></SkeletonLoader>
+      )}
 
       {tableData.length > 0 && (
         <Table
@@ -311,7 +437,7 @@ const CustomerList: React.FC = () => {
           TableHeader={tableHeader}
           TableData={tableData}
           HeaderLoading={headersLoading}
-          DataLoading={customersLoading}
+          DataLoading={customersPageLoading && !initialDataLoaded.current}
           checkbox={true}
           selectedRows={selectedRows}
           onSelectionChange={(rows) => {
@@ -319,22 +445,30 @@ const CustomerList: React.FC = () => {
             setDeleteDialogOpen(rows.length > 0);
           }}
           onRowChange={(rowIndex, updatedRow) => OnEditChange(updatedRow)}
-          onSortClear={() => reloadData()}
+          onSortClear={() => {
+            resetPagination();
+            reloadPageData({ path: `?page=0&size=${PAGE_SIZE}` });
+          }}
+          hasMore={hasMore && !isSearchMode}
+          isFetchingMore={isFetchingMore}
+          onLoadMore={loadNextPage}
         />
       )}
 
-      {!customersLoading &&
+      {(!customersPageLoading || initialDataLoaded.current) &&
         !headersLoading &&
         tableHeader.length > 0 &&
         tableData.length === 0 && (
           <Result
             status="404"
-            title="NO CUSTOMERS FOUND"
+            title={searchQuery.trim() ? `No results for "${searchQuery}"` : "NO CUSTOMERS FOUND"}
             subTitle=""
             extra={
-              <PButton type="primary" onClick={handleNew}>
-                Create
-              </PButton>
+              searchQuery.trim()
+                ? <PButton type="default" onClick={clearSearch}>Clear Search</PButton>
+                : <PButton type="primary" onClick={handleNew}>
+                  Create
+                </PButton>
             }
           />
         )}
@@ -370,9 +504,9 @@ const CustomerList: React.FC = () => {
 
           <div className="flex items-center gap-2">
 
-            <PButton variant="solid" color="primary">
+            {/* <PButton variant="solid" color="primary">
               Bulk Action
-            </PButton>
+            </PButton> */}
 
             <PButton
               variant="solid"

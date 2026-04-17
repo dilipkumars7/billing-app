@@ -20,6 +20,8 @@ import PurchaseList from "./purchase/PurchaseList";
 import PurchaseCreate from "./purchase/new";
 import SupplierList from "./supplier/supplierList";
 import SupplierNew from "./supplier/new";
+import ItemEdit from "./item/edit";
+import PurchaseGet from "./purchase/getId";
 
 export default function AppRoutes() {
   return (
@@ -43,6 +45,7 @@ export default function AppRoutes() {
           <Route path="item">
             <Route index element={<ItemList />} />
             <Route path="create" element={<ItemNew />} />
+            <Route path=":id/edit" element={<ItemEdit />} />
             <Route path=":id" element={<ItemGet />}>
               <Route path="history" element={<ItemGet />} />
               <Route path="transactions" element={<ItemGet />} />
@@ -70,6 +73,7 @@ export default function AppRoutes() {
           <Route path="purchase">
             <Route index element={<PurchaseList />} />
             <Route path="create" element={<PurchaseCreate />} />
+            <Route path=":id" element={<PurchaseGet />} />
           </Route>
 
         </Route>

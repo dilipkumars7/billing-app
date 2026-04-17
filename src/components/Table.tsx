@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import styled from "@emotion/styled";
-import { Button, Dropdown, MenuProps, Checkbox, Tag } from "antd";
+import { Button, Dropdown, MenuProps, Checkbox, Tag, Spin } from "antd";
 import { HiArrowNarrowUp, HiArrowNarrowDown } from "react-icons/hi";
 import { RxDotsHorizontal } from "react-icons/rx";
 import { IoClose } from "react-icons/io5";
@@ -12,6 +12,7 @@ import dayjs from "dayjs";
 import { IoIosArrowDown } from "react-icons/io";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import * as S from "../components/provider/SkeletonStyles";
+import { css } from "@emotion/react";
 
 
 const TableContainer = styled.div`
@@ -58,13 +59,25 @@ const BodyWrapper = styled.div`
   vertical-align: top;
 `;
 
-const Row = styled.div<{ isEditing?: boolean }>`
+const Row = styled.div<{ isEditing?: boolean, isCheckbox?: boolean }>`
   display: flex;
   width: 100%;
   font-size: 13px;
   background-color: ${(props) => props.isEditing ? "#f0f8ff" : "transparent"};
   border-left: ${(props) => props.isEditing ? "4px solid #1890ff" : "4px solid transparent"};
   transition: all 0.2s ease;
+
+  /* Border-left logic */
+  ${(props) =>
+    !props.isCheckbox
+      ? css`
+          border-left: unset;
+        `
+      : css`
+          border-left: ${props.isEditing 
+            ? "4px solid #1890ff" 
+            : "4px solid transparent"};
+        `}
   
   &:hover {
     background-color: ${(props) => props.isEditing ? "#e6f4ff" : "#f0f0f0"};
@@ -146,6 +159,106 @@ const SortSpacer = styled.div<{ isHovered: boolean; isSorted: boolean }>`
   transition: visibility 0.2s ease-in-out;
 `;
 
+// ── Infinite scroll sentinel + loader ────────────────────────────────────────
+
+/**
+ * A thin invisible div placed at the very bottom of the scroll container.
+ * IntersectionObserver fires `onVisible` when it enters the viewport.
+ */
+const InfiniteScrollSentinel: React.FC<{
+  onVisible: () => void;
+  isFetchingMore: boolean;
+  hasMore: boolean;
+  totalWidth: number;
+}> = ({ onVisible, isFetchingMore, hasMore, totalWidth }) => {
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasMore) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          onVisible();
+        }
+      },
+      {
+        // Fire when sentinel is 200px away from the bottom edge of the scroll container
+        rootMargin: "0px 0px 200px 0px",
+        threshold: 0,
+      }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [onVisible, hasMore]);
+
+  return (
+    <>
+      {/* Invisible trigger element */}
+      <div ref={sentinelRef} style={{ height: 1, width: "100%" }} />
+
+      {/* Visible loading indicator */}
+      {isFetchingMore && (
+        <div
+          style={{
+            width: `${totalWidth}px`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "12px 0",
+            gap: 8,
+            borderBottom: "1px solid #091E4224",
+            color: "#6a7282",
+            fontSize: 13,
+          }}
+        >
+          <Spin size="small" />
+          <span>Loading more items…</span>
+        </div>
+      )}
+
+      {/* End-of-data indicator */}
+      {!hasMore && (
+        <div
+          style={{
+            width: `${totalWidth}px`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "10px 0",
+            color: "#b0b8c1",
+            fontSize: 12,
+            borderBottom: "1px solid #091E4224",
+            gap: 6,
+          }}
+        >
+          <span
+            style={{
+              display: "inline-block",
+              width: 40,
+              height: 1,
+              background: "#d9d9d9",
+              verticalAlign: "middle",
+            }}
+          />
+          All items loaded
+          <span
+            style={{
+              display: "inline-block",
+              width: 40,
+              height: 1,
+              background: "#d9d9d9",
+              verticalAlign: "middle",
+            }}
+          />
+        </div>
+      )}
+    </>
+  );
+};
+
 interface TableHeaderConfig {
   headerName: string;
   defaultWidth: string;
@@ -154,6 +267,8 @@ interface TableHeaderConfig {
   options?: { [key: string]: any }[];
   isEditable?: boolean | ((row: any, field: string) => boolean);
   displayAsChip?: boolean;
+  isTag?: boolean;
+  tagColor?: string | ((value: any, row?: any) => string);
 }
 
 interface TableProps {
@@ -169,6 +284,10 @@ interface TableProps {
   idkey?: string;
   HeaderLoading?: boolean;
   DataLoading?: boolean;
+  // ── Infinite scroll props ──────────────────────────────────────────────────
+  hasMore?: boolean;
+  isFetchingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 export default function Table({ 
@@ -183,10 +302,12 @@ export default function Table({
   Idlinkpath,
   HeaderLoading,
   DataLoading,
-  idkey
-  
+  idkey,
+  // Infinite scroll
+  hasMore = false,
+  isFetchingMore = false,
+  onLoadMore,
 }: TableProps) {
-  // const [originalData] = useState(TableData);
   const [sortedData, setSortedData] = useState(TableData);
   const checkboxWidth = 10;
   const columnWidthsRef = useRef<Record<string, number>>({});
@@ -200,6 +321,7 @@ export default function Table({
       }
     });
   }, [TableHeader]);
+
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
     const initial: Record<string, number> = {};
     TableHeader.forEach(h => {
@@ -218,7 +340,6 @@ export default function Table({
     }
   }, [selectedRows]);
 
-
   const [isScrolled, setIsScrolled] = useState(false);
   const [hoveredColumn, setHoveredColumn] = useState<string | null>(null);
   const [HeaderHoverdColumn, setHeaderHoveredColumn] = useState<string | null>(null);
@@ -229,16 +350,7 @@ export default function Table({
   const [searchParams, setSearchParams] = useSearchParams();
 
   const scrollableBodyRef = useRef<HTMLDivElement>(null);
-
   const navigate = useNavigate();
-
-  // Emit selected rows whenever selection changes
-  // useEffect(() => {
-  //   if (onSelectionChange) {
-  //     const selected = sortedData.filter((_, index) => selectedRows.has(index));
-  //     onSelectionChange(selected);
-  //   }
-  // }, [selectedRows, sortedData, onSelectionChange]);
 
   // Initialize sort state from URL
   useEffect(() => {
@@ -261,10 +373,9 @@ export default function Table({
 
     setSearchParams(params, { replace: true });
   }, [sortBy, sortDirection]);
-  //Apply sorting logic
 
   useEffect(() => {
-      setSortedData(TableData);
+    setSortedData(TableData);
   }, [TableData]);
 
   // Scroll synchronization
@@ -284,35 +395,23 @@ export default function Table({
   }, []);
 
   // Column resizing
-  const resizingIndex = useRef<number | null>(null);
-  const resizeOffset = useRef(0);
-
-  // 👇 which column (field) is currently being resized
   const resizingFieldRef = useRef<string | null>(null);
+  const resizeOffset = useRef(0);
 
   const handleMouseMove = (event: MouseEvent) => {
     const field = resizingFieldRef.current;
     if (!field) return;
 
     const prevWidth = columnWidthsRef.current[field] ?? 150;
+    const newWidth = Math.max(150, prevWidth + event.clientX - resizeOffset.current);
 
-    const newWidth = Math.max(
-      150, // ✅ matches UI feel in screenshot
-      prevWidth + event.clientX - resizeOffset.current
-    );
-
-    const next = {
-      ...columnWidthsRef.current,
-      [field]: newWidth,
-    };
-
+    const next = { ...columnWidthsRef.current, [field]: newWidth };
     columnWidthsRef.current = next;
     setColumnWidths(next);
     saveColumnWidthsToLocalStorage(field, newWidth);
 
     resizeOffset.current = event.clientX;
   };
-
 
   const saveColumnWidthsToLocalStorage = (field: string, width: number) => {
     let config: any = {};
@@ -329,25 +428,19 @@ export default function Table({
     if (!config.tableRowOrder) config.tableRowOrder = {};
     if (!config.tableRowOrder[TableName]) config.tableRowOrder[TableName] = [];
 
-    const existing = config.tableRowOrder[TableName].find(
-      (col: any) => col.name === field
-    );
+    const existing = config.tableRowOrder[TableName].find((col: any) => col.name === field);
 
     if (existing) {
       existing.width = width;
     } else {
-      config.tableRowOrder[TableName].push({
-        name: field,
-        isVisible: true,
-        width,
-      });
+      config.tableRowOrder[TableName].push({ name: field, isVisible: true, width });
     }
 
     localStorage.setItem("settingsConfig", JSON.stringify(config));
   };
 
   const handleMouseUp = () => {
-    resizingIndex.current = null;
+    resizingFieldRef.current = null;
     document.removeEventListener("mousemove", handleMouseMove);
     document.removeEventListener("mouseup", handleMouseUp);
   };
@@ -385,24 +478,17 @@ export default function Table({
     }
   };
 
-
   const handleRowSelect = (rowIndex: number, checked: boolean) => {
     setSelectedIndexes(prev => {
       const next = new Set(prev);
       checked ? next.add(rowIndex) : next.delete(rowIndex);
-
-      // ✅ PASS FULL ROW DATA
-      onSelectionChange?.(
-        [...next].map(i => sortedData[i])
-      );
-
+      onSelectionChange?.([...next].map(i => sortedData[i]));
       return next;
     });
   };
 
-
   const activateCell = (rowIndex: number, colIndex: string) => {
-    setEditingCells(new Set([`${rowIndex}-${colIndex}`])); // allow 1 active at a time
+    setEditingCells(new Set([`${rowIndex}-${colIndex}`]));
   };
 
   const deactivateCell = (rowIndex: number, colIndex: number) => {
@@ -484,13 +570,12 @@ export default function Table({
       const target = e.target as Node;
       const isClickInsideTable = tableRef.current.contains(target);
 
-      // Detect Ant Design dropdown portals (Select, DatePicker, Cascader, etc.)
       const isClickOnDropdown =
         (target as Element).closest?.(".ant-select-dropdown") ||
         (target as Element).closest?.(".ant-picker-dropdown") ||
         (target as Element).closest?.(".ant-dropdown") ||
         (target as Element).closest?.(".ant-cascader-dropdown");
-      // Only clear editing if click is outside BOTH table and dropdowns
+
       if (!isClickInsideTable && !isClickOnDropdown) {
         setEditingCells(new Set());
       }
@@ -501,54 +586,59 @@ export default function Table({
   }, []);
 
   const totalWidth =
-  TableHeader.reduce(
-    (sum, h) => sum + (columnWidths[h.field] || 150),
-    0
-  ) + (checkbox ? checkboxWidth : 0);
-  const isAllSelected = sortedData.length > 0 && selectedIndexes.size === sortedData.length;
-  const isIndeterminate = selectedIndexes.size > 0 && selectedIndexes.size < sortedData.length;
+    TableHeader.reduce((sum, h) => sum + (columnWidths[h.field] || 150), 0) +
+    (checkbox ? checkboxWidth : 0);
+
+  const isAllSelected    = sortedData.length > 0 && selectedIndexes.size === sortedData.length;
+  const isIndeterminate  = selectedIndexes.size > 0 && selectedIndexes.size < sortedData.length;
+
+  // ── onLoadMore guard: stable callback ref so IntersectionObserver doesn't re-register ──
+  const onLoadMoreRef = useRef(onLoadMore);
+  useEffect(() => { onLoadMoreRef.current = onLoadMore; }, [onLoadMore]);
+  const stableLoadMore = useCallback(() => { onLoadMoreRef.current?.(); }, []);
+
   return (
     <TableContainer ref={tableRef}>
       <HeaderScrollContainer>
         <HeaderWrapper style={{ left: `${headerLeft}px`, width: `${totalWidth}px` }}>
-        {HeaderLoading ? (
-          <HeaderSkeleton checkbox={checkbox} />
-        ) : (
-          <HeaderRow isScrolled={isScrolled}>
-            {checkbox && (
-              <Cell
-                isHovered={false}
-                isHeaderCell={true}
-                isCheckbox={true}
-                style={{ width: `${checkboxWidth}px` }}
-              >
-                <Checkbox
-                  checked={isAllSelected}
-                  indeterminate={isIndeterminate}
-                  onChange={(e) => handleSelectAll(e.target.checked)}
-                />
-              </Cell>
-            )}
-            {TableHeader.map((item, index) => (
-              <Cell
-                key={index}
-                style={{ width: `${columnWidths[item.field]}px` }}
-                isHovered={hoveredColumn === item.field}
-                onMouseEnter={() => setHeaderHoveredColumn(item.field)}
-                onMouseLeave={() => setHeaderHoveredColumn(null)}
-                isHeaderCell={true}
-              >
-                <div>{item.headerName}</div>
-                {SortFunction(item)}
-                <Resizer
-                  onMouseDown={(event) => handleMouseDown(item.field, event)}
-                  onMouseEnter={() => setHoveredColumn(item.field)}
-                  onMouseLeave={() => setHoveredColumn(null)}
-                />
-              </Cell>
-            ))}
-          </HeaderRow>
-        )}
+          {HeaderLoading ? (
+            <HeaderSkeleton checkbox={checkbox} />
+          ) : (
+            <HeaderRow isScrolled={isScrolled}>
+              {checkbox && (
+                <Cell
+                  isHovered={false}
+                  isHeaderCell={true}
+                  isCheckbox={true}
+                  style={{ width: `${checkboxWidth}px` }}
+                >
+                  <Checkbox
+                    checked={isAllSelected}
+                    indeterminate={isIndeterminate}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                  />
+                </Cell>
+              )}
+              {TableHeader.map((item, index) => (
+                <Cell
+                  key={index}
+                  style={{ width: `${columnWidths[item.field]}px` }}
+                  isHovered={hoveredColumn === item.field}
+                  onMouseEnter={() => setHeaderHoveredColumn(item.field)}
+                  onMouseLeave={() => setHeaderHoveredColumn(null)}
+                  isHeaderCell={true}
+                >
+                  <div>{item.headerName}</div>
+                  {SortFunction(item)}
+                  <Resizer
+                    onMouseDown={(event) => handleMouseDown(item.field, event)}
+                    onMouseEnter={() => setHoveredColumn(item.field)}
+                    onMouseLeave={() => setHoveredColumn(null)}
+                  />
+                </Cell>
+              ))}
+            </HeaderRow>
+          )}
         </HeaderWrapper>
       </HeaderScrollContainer>
 
@@ -560,9 +650,9 @@ export default function Table({
               headers={TableHeader}
               columnWidths={columnWidths}
             />
-          ):(
+          ) : (
             sortedData.map((item, rowIndex) => (
-              <Row key={rowIndex} isEditing={editingCells.has(`${rowIndex}-${item.field}`)}>
+              <Row key={rowIndex} isEditing={editingCells.has(`${rowIndex}-${item.field}`)} isCheckbox={checkbox}>
                 {checkbox && (
                   <Cell
                     isHovered={false}
@@ -577,7 +667,6 @@ export default function Table({
                   </Cell>
                 )}
                 {TableHeader.map((header, colIndex) => {
-                  const cellKey = `${rowIndex}-${header.field}`;
                   const isEditing = editingCells.has(`${rowIndex}-${header.field}`);
                   const isCellEditable = typeof header.isEditable === "function"
                     ? header.isEditable(item, header.field)
@@ -593,13 +682,16 @@ export default function Table({
                       onClick={() => activateCell(rowIndex, header.field)} 
                     >
                       {header.isEditable && (
-
                         <EditableCell
                           value={item[header.field]}
                           rowIndex={rowIndex}
                           colIndex={colIndex}
                           field={header.field}
                           type={header.type || "text"}
+                          isTag={header.isTag || false}
+                          tagColor={typeof header.tagColor === "function" 
+                            ? header.tagColor(item[header.field], item) 
+                            : header.tagColor || "blue"}
                           options={header.options}
                           onValueChange={handleCellValueChange}
                           isEditable={isCellEditable}
@@ -609,7 +701,7 @@ export default function Table({
                         />
                       )}
                       {!header.isEditable && (
-                        header.field.toLowerCase().includes("code") ? (
+                        (header.field.toLowerCase().includes("code") || header.field.toLowerCase().includes("number")) ? (
                           <div
                             onClick={() => navigate(`/${Idlinkpath}/${item[header.field]}`)}
                             className="text-[#1868DB] underline cursor-pointer hover:text-blue-800 select-none"
@@ -617,7 +709,20 @@ export default function Table({
                             {item[header.field]}
                           </div>
                         ) : (
-                          <span className="select-none">{item[header.field]}</span>
+                          <span className="select-none">
+                            {header.isTag ? (
+                              <Tag variant="outlined"
+                                color={typeof header.tagColor === "function" 
+                                  ? header.tagColor(item[header.field], item) 
+                                  : header.tagColor || "blue"} 
+                                style={{ marginLeft: 8 }}
+                              >
+                                {item[header.field]}
+                              </Tag>
+                            ): (
+                              item[header.field]
+                            )}
+                          </span>
                         )
                       )}
                     </Cell>
@@ -625,11 +730,17 @@ export default function Table({
                 })}
               </Row>
             ))
-          )
-          }
-          {/* {sortedData.map((item, rowIndex) => (
-            
-          ))} */}
+          )}
+
+          {/* ── Infinite scroll sentinel (outside DataLoading guard) ──── */}
+          {!DataLoading && onLoadMore && (
+            <InfiniteScrollSentinel
+              onVisible={stableLoadMore}
+              isFetchingMore={isFetchingMore}
+              hasMore={hasMore}
+              totalWidth={totalWidth}
+            />
+          )}
         </BodyWrapper>
       </ScrollableBody>
     </TableContainer>
@@ -692,7 +803,9 @@ function EditableCell({
   isEditable = true,
   displayAsChip = false,
   onDeactivate,
-  isActive = false,               // <-- new prop
+  isActive = false,
+  isTag = false,
+  tagColor = "blue",
 }: {
   value: any;
   rowIndex: number;
@@ -705,6 +818,8 @@ function EditableCell({
   displayAsChip?: boolean;
   onDeactivate?: (rowIndex: number, colIndex: number) => void;
   isActive?: boolean;
+  isTag?: boolean;
+  tagColor?: string;
 }) {
   const [localValue, setLocalValue] = useState(
     value !== null && value !== undefined ? String(value) : ""
@@ -732,17 +847,22 @@ function EditableCell({
     return isNaN(dt.getTime()) ? val : dt.toISOString().split("T")[0];
   };
 
-  // READ-ONLY preview (show when NOT active)
   if (!isActive) {
     const display = type === "date" ? formatDate(value) : localValue || "—";
     if (displayAsChip && localValue) {
-      return <Tag color="blue" style={{ margin: 0 }}>{display}</Tag>;
+      return <Tag color={tagColor} style={{ margin: 0 }}>{display}</Tag>;
     }
-    return <div className="text-[13px] select-none">{display}</div>;
+    return <div className="text-[13px] select-none">
+      {isTag ? (
+        <Tag color={tagColor} variant="outlined" style={{ margin: 0 }}>
+          {display}
+        </Tag>
+      ) : (
+        display
+      )}
+    </div>;
   } 
 
-
-  // ACTIVE EDIT MODE: render the input only
   return (
     <div style={{ width: "100%" }}>
       {type === "number" && (
@@ -756,7 +876,6 @@ function EditableCell({
           controls={false}
           precision={2} 
           inputMode="numeric"
-          // optional: prevent wheel from accidentally changing value
           onWheel={(e) => (e.currentTarget as HTMLElement).blur()}
         />
       )}
@@ -769,11 +888,7 @@ function EditableCell({
           value={localValue ? dayjs(localValue) : null}
           onChange={(d) => handleChange(d)}
           onBlur={handleBlur as any}
-          style={{
-            width: "100%",
-            border: "none",
-            background: "transparent",
-          }}
+          style={{ width: "100%", border: "none", background: "transparent" }}
         />
       )}
 
@@ -859,9 +974,7 @@ const BodySkeleton = ({
             key={header.field}
             isHovered={false}
             isHeaderCell={false}
-            style={{
-              width: `${(columnWidths[header.field]) ?? 150}px`,
-            }}
+            style={{ width: `${(columnWidths[header.field]) ?? 150}px` }}
           >
             <div css={S.skeletonBlock} />
           </Cell>
@@ -870,4 +983,3 @@ const BodySkeleton = ({
     ))}
   </>
 );
-

@@ -1,16 +1,17 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import Table from "../../components/Table";
 import { useApi } from "../../hooks/useApi";
 import { PATH } from "../../constants/app.constant";
 import SkeletonLoader from "../../components/SkeletonLoader";
-import Button from '@mui/joy/Button';
-import { Button as PButton, Result, Tag, Badge } from "antd";
-import Tooltip from '@mui/joy/Tooltip';
 import { IoSearchOutline } from "react-icons/io5";
 import { IoMdAddCircleOutline } from "react-icons/io";
 import { LuSettings2 } from "react-icons/lu";
 import { useNavigate, useSearchParams } from "react-router-dom";
-
+import {
+  Button as PButton, Result, Tag, Badge,
+  Tooltip as AntTooltip, Drawer, Select,
+  Slider, Divider as AntDivider,
+} from "antd";
 import { purchaseUpdateSubject, purchaseUpdateStream$ } from "../../services/updateStream";
 import { useSelector } from "react-redux";
 import { RootState } from "../../store/store";
@@ -20,14 +21,38 @@ import { CookieService } from "../../store/Cookie";
 import { IoClose } from "react-icons/io5";
 import { useNotification } from "../../components/provider/NotificationProvider";
 
+const PAGE_SIZE = 15;
+
 const PurchaseList: React.FC = () => {
 
   const notificationApi = useNotification();
-
   const [searchParams] = useSearchParams();
+  const companyId = CookieService.get('companyId') || '';
 
-  const { data: purchaseData, loading: purchaseLoading, error: purchaseError, refetch:reloadData } =
-      useApi<any[]>(`${PATH.PURCHASE_DATA}/all/${CookieService.get('companyId')}`, { method: "GET" });
+  // ── Pagination state ──────────────────────────────────────────────────────
+  const [currentPage,   setCurrentPage]   = useState(0);
+  const [hasMore,       setHasMore]       = useState(true);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const allDataRef = useRef<any[]>([]);
+  const initialDataLoaded = useRef(false);
+
+  // ── Search state ──────────────────────────────────────────────────────────
+  const [searchQuery,  setSearchQuery]  = useState('');
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const debounceTimer                   = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const {
+    data: purchasePageData,
+    loading: purchasePageLoading,
+    error: purchaseAllError,
+    refetch: reloadPageData,
+  } = useApi<{ content: any[]; totalElements: number; last: boolean }>(
+    `${PATH.PURCHASE_DATA}/all/${companyId}`,
+    { method: "GET" }
+  );
+
+  const { data: purchaseSearchData, loading: purchaseSearchLoading, error: purchaseSearchError, refetch: reloadSearchData } =
+    useApi<any[]>(`${PATH.PURCHASE_DATA}/search`, { method: "GET", autoFetch: false });
   
   const { data: headersData, loading: headersLoading, error: headersError } =
     useApi<any[]>(PATH.GET_CONFIG_HEADER + '/purchase', { method: "GET" });
@@ -52,20 +77,39 @@ const PurchaseList: React.FC = () => {
 
   const userSettings = useSelector((state: RootState) => state.userSettings.settings);
 
-  const lastFetchRef = useRef<string | null>(null);
-  
-  useEffect(() => {
-    const sortBy = searchParams.get("sortBy");
-    const direction = searchParams.get("direction");
-    if (!sortBy || !direction) return;
-    const key = `${sortBy}_${direction}`;
-    if (lastFetchRef.current === key) return;
+  const lastSortKeyRef = useRef<string | null>(null);
 
-    lastFetchRef.current = key;
-    reloadData({
-      path: `?sortBy=${sortBy}&direction=${direction}`,
-    });
-  }, [searchParams, reloadData]);
+  const resetPagination = useCallback(() => {
+    allDataRef.current     = [];
+    setCurrentPage(0);
+    setHasMore(true);
+    setIsFetchingMore(false);
+    initialDataLoaded.current = false;
+  }, []);
+
+  useEffect(() => {
+    const sortBy    = searchParams.get("sortBy");
+    const direction = searchParams.get("direction");
+    const key = sortBy && direction ? `${sortBy}_${direction}` : null;
+    if (key === lastSortKeyRef.current) return;
+    lastSortKeyRef.current = key;
+
+    resetPagination();
+    const sortQuery = sortBy && direction ? `?page=0&size=${PAGE_SIZE}&sortBy=${sortBy}&direction=${direction}` : `?page=0&size=${PAGE_SIZE}`;
+    reloadPageData({ path: sortQuery });
+  }, [searchParams, reloadPageData, resetPagination]);
+
+  useEffect(() => {
+    if (!tableHeader.length) return;
+    if (allDataRef.current.length === 0 && !initialDataLoaded.current) {
+      const sortBy    = searchParams.get("sortBy");
+      const direction = searchParams.get("direction");
+      const sortQuery = sortBy && direction
+        ? `?page=0&size=${PAGE_SIZE}&sortBy=${sortBy}&direction=${direction}`
+        : `?page=0&size=${PAGE_SIZE}`;
+      reloadPageData({ path: sortQuery });
+    }
+  }, [tableHeader, searchParams, reloadPageData]);
 
 
   useEffect(() => {
@@ -149,20 +193,99 @@ const PurchaseList: React.FC = () => {
     }
   }, [Settings, SettingsError, DeleteData, DeleteError, deleteLoad, notificationApi]);
 
-  useEffect(() => {
-    if (!purchaseData || !tableHeader.length) return;
-
+  const applyHeaderFilter = useCallback((items: any[]) => {
+    if (!tableHeader.length) return items;
     const fields = tableHeader.map(h => h.field);
-    const formatted = purchaseData.map((item:any)=> {
+    return items.map(item => {
       const out: any = {};
-      fields.forEach(field => {
-        out[field] = item[field];
-      });
+      fields.forEach(field => { out[field] = item[field]; });
       out.supplierCode = item.supplierCode;
+      out.purchaseCode = item.purchaseCode;
       return out;
     });
-    setTableData(formatted);
-  }, [purchaseData, tableHeader])
+  }, [tableHeader]);
+
+  useEffect(() => {
+    if (!purchasePageData || isSearchMode) return;
+    const incoming = purchasePageData.content ?? (Array.isArray(purchasePageData) ? purchasePageData : []);
+    const isLastPage: boolean = purchasePageData.last ?? (incoming.length < PAGE_SIZE);
+
+    const filtered = applyHeaderFilter(incoming);
+
+    // ✅ Deduplicate by purchaseCode before appending
+    const existingCodes = new Set(allDataRef.current.map((r: any) => r.purchaseCode));
+    const newItems = filtered.filter((item: any) => !existingCodes.has(item.purchaseCode));
+
+    allDataRef.current = [...allDataRef.current, ...newItems];
+    setTableData([...allDataRef.current]);
+
+    setHasMore(!isLastPage);
+    setIsFetchingMore(false);
+    initialDataLoaded.current = true;
+  }, [purchasePageData, isSearchMode, applyHeaderFilter]);
+
+  useEffect(() => {
+    if (!isSearchMode) return;
+
+    if (purchaseSearchError) {
+      notificationApi.error({
+        message: 'Search failed',
+        description: (purchaseSearchError as any)?.message || 'Could not fetch search results.',
+      });
+      setIsSearchMode(false);
+      setTableData([...allDataRef.current]);
+      return;
+    }
+
+    if (purchaseSearchData !== undefined && purchaseSearchData !== null) {
+      setTableData(applyHeaderFilter(purchaseSearchData));
+    }
+  }, [purchaseSearchData, purchaseSearchError, isSearchMode, notificationApi, applyHeaderFilter]);
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+
+    if (!value.trim()) {
+      setIsSearchMode(false);
+      setTableData([...allDataRef.current]);
+      return;
+    }
+
+    debounceTimer.current = setTimeout(() => {
+      setIsSearchMode(true);
+      reloadSearchData({
+        path: `?q=${encodeURIComponent(value.trim())}&companyId=${encodeURIComponent(companyId)}`,
+      });
+    }, 350);
+  }, [companyId, allDataRef, reloadSearchData]);
+
+  const clearSearch = useCallback(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    setSearchQuery('');
+    setIsSearchMode(false);
+    setTableData([...allDataRef.current]);
+  }, []);
+
+  useEffect(() => () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); }, []);
+
+  const loadNextPage = useCallback(() => {
+    if (!hasMore || isFetchingMore || isSearchMode || purchasePageLoading) return;
+
+    setIsFetchingMore(true);
+    const nextPage = currentPage + 1;
+    setCurrentPage(nextPage);
+
+    const sortBy    = searchParams.get("sortBy");
+    const direction = searchParams.get("direction");
+    const sortQuery = sortBy && direction
+      ? `?page=${nextPage}&size=${PAGE_SIZE}&sortBy=${sortBy}&direction=${direction}`
+      : `?page=${nextPage}&size=${PAGE_SIZE}`;
+
+    reloadPageData({ path: sortQuery });
+  }, [hasMore, isFetchingMore, isSearchMode, purchasePageLoading, currentPage, searchParams, reloadPageData]);
 
   useEffect(() => {
       if (!openModal || !headersData) return;
@@ -180,9 +303,9 @@ const PurchaseList: React.FC = () => {
       });
       const ordered = savedOrder.length
         ? savedOrder
-            .map((s: any) => merged.find((m) => m.name === s.name))
+            .map((s: any) => merged.find((m:any) => m.name === s.name))
             .filter(Boolean)
-            .concat(merged.filter((m) => !map.has(m.name)))
+            .concat(merged.filter((m:any) => !map.has(m.name)))
         : merged;
       setViewSettings(ordered);
     }, [openModal, headersData]);
@@ -230,7 +353,8 @@ const PurchaseList: React.FC = () => {
           delete pendingDeleteConfirmations.current[code];
         });
         // fallback reload to ensure consistency
-        await reloadData();
+        resetPagination();
+        reloadPageData({ path: `?page=0&size=${PAGE_SIZE}` });
       }
       closeDeleteDialog();
     } catch (err:any) {
@@ -255,6 +379,7 @@ const PurchaseList: React.FC = () => {
     purchaseUpdateSubject.next(updateData);
     if (updateData?.supplierCode) {
       setTableData(prev => prev.map(r => r.supplierCode === updateData.supplierCode ? { ...r, ...updateData } : r));
+      allDataRef.current = allDataRef.current.map(r => r.supplierCode === updateData.supplierCode ? { ...r, ...updateData } : r);
     }
   };
 
@@ -263,41 +388,41 @@ const PurchaseList: React.FC = () => {
 
   return (
     <div className="p-[12px]">
-      {tableHeader.length!=0 && tableData.length!=0 && (
+      {tableHeader.length!=0 && (
         <div className="flex items-center justify-between px-1 py-2">
           <div className="flex items-center w-[15rem] pr-3 gap-2 bg-white border-gray-500/30 border-2 hover:border-[#357DE8] focus-within:border-[#357DE8] h-[39px] rounded-[5px] overflow-hidden">
             <input
               className="w-full h-full pl-5 outline-none placeholder-gray-500 text-sm"
-              placeholder="Search for Items"
+              placeholder="Search for Purchases"
               type="text"
+              value={searchQuery}
+              onChange={handleSearchChange}
             />
-            <IoSearchOutline size={25} color="#6a7282" />
+            {isSearchMode && purchaseSearchLoading
+              ? <span className="pr-1 text-gray-400 text-xs animate-pulse">…</span>
+              : searchQuery
+                ? <IoClose size={20} color="#6a7282" className="cursor-pointer flex-shrink-0 mr-1" onClick={clearSearch} />
+                : <IoSearchOutline size={25} color="#6a7282" className="flex-shrink-0" />
+            }
           </div>
 
           <div className="flex gap-2 items-center">
 
-            <Tooltip title="Add Products" variant="solid" placement="top">
-              <Button size="sm" onClick={handleNew}>
-                <IoMdAddCircleOutline size={25} />
-              </Button>
-            </Tooltip>
+            <AntTooltip title="Create Purchase">
+              <PButton variant="solid" color="primary" onClick={handleNew}><IoMdAddCircleOutline size={25} /></PButton>
+            </AntTooltip>
 
-            <Tooltip title="View Settings" variant="solid" placement="top">
-              <Button size="sm" variant="outlined" onClick={()=>{setOpenModal(true)}}>
-                <LuSettings2 size={20} />
-              </Button>
-            </Tooltip>
+            <AntTooltip title="View Settings">
+              <PButton variant="outlined" onClick={() => setOpenModal(true)}><LuSettings2 size={20} /></PButton>
+            </AntTooltip>
           </div>
         </div>
       )
       }
 
-      {purchaseLoading &&
-      headersLoading &&
-      (
+      {purchasePageLoading && !initialDataLoaded.current && headersLoading && (
         <SkeletonLoader></SkeletonLoader>
-      )
-      }
+      )}
 
       {tableData.length > 0 && (
         <Table
@@ -307,7 +432,7 @@ const PurchaseList: React.FC = () => {
           TableHeader={tableHeader}
           TableData={tableData}
           HeaderLoading={headersLoading}
-          DataLoading={purchaseLoading}
+          DataLoading={purchasePageLoading && !initialDataLoaded.current}
           checkbox={true}
           selectedRows={selectedRows}
           onSelectionChange={(rows) => {
@@ -315,22 +440,30 @@ const PurchaseList: React.FC = () => {
             setDeleteDialogOpen(rows.length > 0);
           }}
           onRowChange={(rowIndex, updatedRow) => OnEditChange(updatedRow)}
-          onSortClear={() => reloadData()}
+          onSortClear={() => {
+            resetPagination();
+            reloadPageData({ path: `?page=0&size=${PAGE_SIZE}` });
+          }}
+          hasMore={hasMore && !isSearchMode && tableData.length >= PAGE_SIZE}
+          isFetchingMore={isFetchingMore}
+          onLoadMore={loadNextPage}
         />
       )}
 
-      {!purchaseLoading &&
+      {(!purchasePageLoading || initialDataLoaded.current) &&
         !headersLoading &&
         tableHeader.length > 0 &&
         tableData.length === 0 && (
           <Result
             status="404"
-            title="NO PURCHASE HISTORY FOUND"
+            title={searchQuery.trim() ? `No results for "${searchQuery}"` : "NO PURCHASE HISTORY FOUND"}
             subTitle=""
             extra={
-              <PButton type="primary" onClick={handleNew}>
-                Create
-              </PButton>
+              searchQuery.trim()
+                ? <PButton type="default" onClick={clearSearch}>Clear Search</PButton>
+                : <PButton type="primary" onClick={handleNew}>
+                    Create
+                  </PButton>
             }
           />
         )}
@@ -366,9 +499,9 @@ const PurchaseList: React.FC = () => {
 
           <div className="flex items-center gap-2">
 
-            <PButton variant="solid" color="primary">
+            {/* <PButton variant="solid" color="primary">
               Bulk Action
-            </PButton>
+            </PButton> */}
 
             <PButton
               variant="solid"

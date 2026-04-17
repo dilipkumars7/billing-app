@@ -46,6 +46,10 @@ const Footer = styled.div`
   gap: 10px;
 `;
 
+const Rupee = styled.span`
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+`;
+
 interface CustomField {
   id: string;
   fieldName: string;
@@ -73,8 +77,8 @@ export default function InvoiceGetId() {
     { method: 'GET' }
   );
 
-  const { data: customFieldsData } = useApi<CustomField[]>(
-    `${PATH.CUSTOM_FIELDS_DATA}/company/${companyId}/table/invoices/active`,
+  const { data: paymentHistoryData, loading: paymentHistoryLoading, refetch: refetchPaymentHistory } = useApi<any>(
+    `${PATH.INVOICES_DATA}/${id}/payments`,
     { method: 'GET' }
   );
 
@@ -98,6 +102,7 @@ export default function InvoiceGetId() {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<string>('CASH');
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
 
   useEffect(() => {
     if (invoiceData) {
@@ -106,19 +111,21 @@ export default function InvoiceGetId() {
   }, [invoiceData]);
 
   useEffect(() => {
-    if (customFieldsData) {
-      setCustomFields(customFieldsData);
+    if (paymentHistoryData) {
+      setPaymentHistory(paymentHistoryData);
     }
-  }, [customFieldsData]);
+  }, [paymentHistoryData]);
+
 
   useEffect(() => {
     if (paymentResult) {
       notificationApi.success({
         message: 'Payment Recorded',
-        description: `Payment of ₹${paymentAmount} recorded successfully`
+        description: `Payment of ₹ ${paymentAmount} recorded successfully`
       });
       setPaymentModalOpen(false);
       refetchInvoice();
+      refetchPaymentHistory();
     }
   }, [paymentResult]);
 
@@ -179,14 +186,14 @@ export default function InvoiceGetId() {
 
   const itemColumns = [
     { title: 'Item', dataIndex: 'itemName', key: 'itemName' },
-    { title: 'Description', dataIndex: 'description', key: 'description' },
+    { title: 'Boxes', dataIndex: 'boxQuantity', key: 'boxQuantity' },
     { title: 'Qty', dataIndex: 'quantity', key: 'quantity' },
     { title: 'Unit', dataIndex: 'unit', key: 'unit' },
     {
       title: 'Unit Price',
       dataIndex: 'unitPrice',
       key: 'unitPrice',
-      render: (val: number) => `₹${(val || 0).toFixed(2)}`
+      render: (val: number) => `₹ ${(val || 0).toLocaleString('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     },
     {
       title: 'Tax Rate',
@@ -198,7 +205,7 @@ export default function InvoiceGetId() {
       title: 'Amount',
       dataIndex: 'totalAmount',
       key: 'totalAmount',
-      render: (val: number) => `₹${(val || 0).toFixed(2)}`
+      render: (val: number) => `₹ ${(val || 0).toLocaleString('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     }
   ];
 
@@ -243,7 +250,7 @@ export default function InvoiceGetId() {
         return value ? 'Yes' : 'No';
       case 'DATE':
       case 'DATETIME':
-        return dayjs(value).format(fieldType === 'DATE' ? 'YYYY-MM-DD' : 'YYYY-MM-DD HH:mm:ss');
+        return dayjs(value).format("MMMM D, YYYY [at] h:mm A");
       case 'MULTISELECT':
         return Array.isArray(value) ? value.join(', ') : value;
       default:
@@ -259,7 +266,7 @@ export default function InvoiceGetId() {
           <Tag color={statusColors[invoice.status] || 'default'}>
             {invoice.status}
           </Tag>
-          <Select
+          {/* <Select
             size="small"
             value={invoice.status}
             onChange={handleStatusChange}
@@ -273,7 +280,7 @@ export default function InvoiceGetId() {
               { label: 'Overdue', value: 'OVERDUE' },
               { label: 'Cancelled', value: 'CANCELLED' }
             ]}
-          />
+          /> */}
         </div>
       </Header>
 
@@ -285,10 +292,10 @@ export default function InvoiceGetId() {
               <Tag color={statusColors[invoice.status] || 'default'}>{invoice.status}</Tag>
             </Descriptions.Item>
             <Descriptions.Item label="Invoice Date">
-              {invoice.invoiceDate ? dayjs(invoice.invoiceDate).format('YYYY-MM-DD') : '-'}
+              {invoice.invoiceDate ? dayjs(invoice.invoiceDate).format('DD-MM-YYYY') : '-'}
             </Descriptions.Item>
             <Descriptions.Item label="Due Date">
-              {invoice.dueDate ? dayjs(invoice.dueDate).format('YYYY-MM-DD') : '-'}
+              {invoice.dueDate ? dayjs(invoice.dueDate).format('DD-MM-YYYY') : '-'}
             </Descriptions.Item>
           </Descriptions>
         </Card>
@@ -326,23 +333,23 @@ export default function InvoiceGetId() {
 
         <Card title="Payment Summary" style={{ marginBottom: 16 }}>
           <Descriptions column={2} bordered size="small">
-            <Descriptions.Item label="Subtotal">₹{(invoice.subtotal || 0).toFixed(2)}</Descriptions.Item>
-            <Descriptions.Item label="Tax Amount">₹{(invoice.taxAmount || 0).toFixed(2)}</Descriptions.Item>
+            <Descriptions.Item label="Subtotal"><Rupee>₹</Rupee> {(invoice.subtotal || 0).toLocaleString('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Descriptions.Item>
+            <Descriptions.Item label="Tax Amount"><Rupee>₹</Rupee> {(invoice.taxAmount || 0).toLocaleString('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Descriptions.Item>
             <Descriptions.Item label="Discount">
               {invoice.discountPercentage ? `${invoice.discountPercentage}% - ` : ''}
-              ₹{(invoice.discountAmount || 0).toFixed(2)}
+              <Rupee>₹</Rupee> {(invoice.discountAmount || 0).toLocaleString('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </Descriptions.Item>
             <Descriptions.Item label="Total Amount">
               <strong style={{ color: '#1677ff', fontSize: 16 }}>
-                ₹{(invoice.totalAmount || 0).toFixed(2)}
+                <Rupee>₹</Rupee> {(invoice.totalAmount || 0).toLocaleString('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </strong>
             </Descriptions.Item>
             <Descriptions.Item label="Paid Amount">
-              <span style={{ color: 'green' }}>₹{(invoice.paidAmount || 0).toFixed(2)}</span>
+              <span style={{ color: 'green' }}><Rupee>₹</Rupee> {(invoice.paidAmount || 0).toLocaleString('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </Descriptions.Item>
             <Descriptions.Item label="Balance Due">
               <strong style={{ color: invoice.balanceDue > 0 ? 'red' : 'green' }}>
-                ₹{(invoice.balanceDue || 0).toFixed(2)}
+                <Rupee>₹</Rupee> {(invoice.balanceDue || 0).toLocaleString('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </strong>
             </Descriptions.Item>
             {invoice.paymentMethod && (
@@ -380,21 +387,51 @@ export default function InvoiceGetId() {
           <Descriptions column={2} bordered size="small">
             <Descriptions.Item label="Created By">{invoice.createdBy || '-'}</Descriptions.Item>
             <Descriptions.Item label="Created On">
-              {invoice.createdOn ? dayjs(invoice.createdOn).format('YYYY-MM-DD HH:mm:ss') : '-'}
+              {invoice.createdOn ? dayjs(invoice.createdOn).format("MMMM D, YYYY [at] h:mm A") : '-'}
             </Descriptions.Item>
             <Descriptions.Item label="Updated By">{invoice.updatedBy || '-'}</Descriptions.Item>
             <Descriptions.Item label="Updated On">
-              {invoice.updatedOn ? dayjs(invoice.updatedOn).format('YYYY-MM-DD HH:mm:ss') : '-'}
+              {invoice.updatedOn ? dayjs(invoice.updatedOn).format("MMMM D, YYYY [at] h:mm A") : '-'}
             </Descriptions.Item>
           </Descriptions>
         </Card>
+
+        {paymentHistory.length > 0 && (
+          <Card title="Payment History" style={{ marginTop: 16 }}>
+            <Table
+              dataSource={paymentHistory}
+              pagination={false}
+              size="small"
+              rowKey="id"
+              columns={[
+                {
+                  title: 'Date',
+                  dataIndex: 'paymentDate',
+                  key: 'paymentDate',
+                  render: (date: string) => date ? dayjs(date).format("MMMM D, YYYY [at] h:mm A") : '-'
+                },
+                {
+                  title: 'Amount',
+                  dataIndex: 'paymentAmount',
+                  key: 'paymentAmount',
+                  render: (val: number) => `₹ ${(val || 0).toLocaleString('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                },
+                {
+                  title: 'Method',
+                  dataIndex: 'paymentMethod',
+                  key: 'paymentMethod'
+                }
+              ]}
+            />
+          </Card>
+        )}
       </Content>
 
       <Footer>
         <Button type="primary" onClick={() => setPaymentModalOpen(true)} disabled={invoice.balanceDue <= 0}>
           Record Payment
         </Button>
-        <Button onClick={() => navigate(`/invoice/edit/${id}`)}>Edit</Button>
+        {/* <Button onClick={() => navigate(`/invoice/edit/${id}`)}>Edit</Button> */}
         <Button danger onClick={handleDelete} loading={deleteLoading}>
           Delete
         </Button>
@@ -414,12 +451,12 @@ export default function InvoiceGetId() {
             value={paymentAmount}
             onChange={(val) => setPaymentAmount(val || 0)}
             style={{ width: '100%', marginTop: 8 }}
-            prefix="₹"
+            prefix={<Rupee>₹</Rupee>}
             min={0}
             max={invoice.balanceDue}
           />
           <div style={{ color: '#888', marginTop: 4 }}>
-            Balance Due: ₹{(invoice.balanceDue || 0).toFixed(2)}
+            Balance Due: <Rupee>₹</Rupee>{(invoice.balanceDue || 0).toFixed(2)}
           </div>
         </div>
         <div>
