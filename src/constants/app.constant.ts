@@ -30,6 +30,11 @@ export const PATH = {
 
   POST_DROP_DOWN: 'api/dropdown',
 
-
+  DASHBOARD_WELCOME: 'api/dashboard/welcome',
+  DASHBOARD_SUMMARY: 'api/dashboard/summary',
+  DASHBOARD_ITEMS: 'api/dashboard/items',
+  DASHBOARD_SALES_HISTORY: 'api/dashboard/sales-history',
+  DASHBOARD_MONTHLY_REPORT: 'api/dashboard/monthly-report',
+  DASHBOARD_YEARLY_SUMMARY: 'api/dashboard/yearly-summary',
 
 }

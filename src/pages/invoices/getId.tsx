@@ -7,6 +7,7 @@ import { useNotification } from '../../components/provider/NotificationProvider'
 import { CookieService } from '../../store/Cookie'
 import styled from '@emotion/styled'
 import dayjs from 'dayjs'
+import Avatar from '../../components/Avatar'
 
 const Container = styled.div`
   display: grid;
@@ -161,7 +162,8 @@ export default function InvoiceGetId() {
     await recordPayment({
       body: {
         amount: paymentAmount,
-        paymentMethod: paymentMethod
+        paymentMethod: paymentMethod,
+        createdBy: CookieService.get('user_name') || 'system'
       }
     });
   };
@@ -272,7 +274,7 @@ export default function InvoiceGetId() {
             onChange={handleStatusChange}
             loading={statusLoading}
             style={{ width: 140 }}
-            options={[
+            options={[  
               { label: 'Draft', value: 'DRAFT' },
               { label: 'Sent', value: 'SENT' },
               { label: 'Paid', value: 'PAID' },
@@ -420,6 +422,12 @@ export default function InvoiceGetId() {
                   title: 'Method',
                   dataIndex: 'paymentMethod',
                   key: 'paymentMethod'
+                },
+                {
+                  title: 'Recorded By',
+                  dataIndex: 'createdBy',
+                  key: 'createdBy',
+                  render: (val: string) => (<div className='flex items-center gap-2'><Avatar name={val} size={24} /> <span>{val || '-'}</span></div>)
                 }
               ]}
             />

@@ -73,7 +73,7 @@ const FormUxScope = styled.div`
   .ant-form-item-has-error .ant-select-selector { background-color: #fff; }
 `;
 
-// ─── Totals Section Styles (matches PurchaseCreate) ───────────────────────────
+// ─── Totals Section Styles ────────────────────────────────────────────────────
 
 const TotalsWrapper = styled.div`
   display: flex;
@@ -110,10 +110,7 @@ const TotalsRow = styled.div<{ highlight?: boolean; grand?: boolean; discount?: 
     grand ? '#237804' : discount ? '#cf1322' : '#1a1a1a'};
 `;
 const TotalsLabel = styled.span`color: inherit;`;
-const TotalsValue = styled.span`
-  font-weight: inherit;
-  color: inherit;
-`;
+const TotalsValue = styled.span`font-weight: inherit; color: inherit;`;
 
 // ─── Discount toggle ──────────────────────────────────────────────────────────
 
@@ -138,6 +135,23 @@ const DiscountTypeToggle = styled.div`
 
 const Rupee = styled.span`
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+`;
+
+// ─── Row error banner ─────────────────────────────────────────────────────────
+
+const RowErrorBanner = styled.div`
+  grid-column: 1 / -1;
+  background: #fff2f0;
+  border: 1px solid #ffccc7;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #cf1322;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: -4px;
+  margin-bottom: 2px;
 `;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -170,12 +184,20 @@ interface InvoiceItem {
 }
 type DiscountType = 'percentage' | 'amount';
 
+// ─── Stock validation types ───────────────────────────────────────────────────
+
+interface RowError {
+  type: 'NO_ITEM' | 'OUT_OF_STOCK' | 'INSUFFICIENT_STOCK' | 'LOW_STOCK' | 'NO_QUANTITY';
+  message: string;
+  severity: 'error' | 'warning';
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function InvoiceCreate() {
   const location = useLocation();
   const preSelectedItems = location.state?.preSelectedItems as any[] | undefined;
-  
+
   const companyId = CookieService.get('companyId') || '';
 
   const {
@@ -200,7 +222,7 @@ export default function InvoiceCreate() {
             description: '',
             quantity: 0,
             boxQuantity: 0,
-            itemBoxQuantity:  item.boxQuantity,
+            itemBoxQuantity: item.boxQuantity,
             size: item.size || '',
             category: item.category || '',
             unit: item.unit || '',
@@ -238,7 +260,10 @@ export default function InvoiceCreate() {
   const [discountType, setDiscountType]       = useState<DiscountType>('percentage');
   const [customFields, setCustomFields]       = useState<CustomField[]>([]);
   const [customerOptions, setCustomerOptions] = useState<any[]>([]);
-  const [itemsVersion, setItemsVersion] = useState(0);
+  const [itemsVersion, setItemsVersion]       = useState(0);
+
+  // ── Row-level validation errors (keyed by row index) ──────────────────────
+  const [rowErrors, setRowErrors] = useState<Record<number, RowError>>({});
 
   // --- Items (scroll loading + search) ---
   const allItemsRef = useRef<any[]>([]);
@@ -261,7 +286,6 @@ export default function InvoiceCreate() {
   const { data, loading, error, refetch } = useApi<any>(
     PATH.INVOICES_DATA, { method: 'POST', autoFetch: false }
   );
-
 
   useEffect(() => {
     if (customersData) {
@@ -330,17 +354,17 @@ export default function InvoiceCreate() {
   const itemOptions = React.useMemo(() => {
     if (!itemOptionsState?.length) return [];
     return itemOptionsState.map((item: any) => ({
-      label:          item?.name          || item?.itemName || '',
-      value:          item?.itemCode      || '',
-      itemName:       item?.name          || item?.itemName || '',
-      category:       item?.category      || '',
-      unit:           item?.unit          || '',
-      itemCode:       item?.itemCode      || '',
-      sellingPrice:   item?.sellingPrice  || 0,
-      taxRate:        item?.taxRate       || 0,
-      quantity:       item?.quantity      || 0,
-      size:           item?.size          || '',
-      itemBoxQuantity: item?.boxQuantity  || 0,
+      label:           item?.name          || item?.itemName || '',
+      value:           item?.itemCode      || '',
+      itemName:        item?.name          || item?.itemName || '',
+      category:        item?.category      || '',
+      unit:            item?.unit          || '',
+      itemCode:        item?.itemCode      || '',
+      sellingPrice:    item?.sellingPrice  || 0,
+      taxRate:         item?.taxRate       || 0,
+      quantity:        item?.quantity      || 0,
+      size:            item?.size          || '',
+      itemBoxQuantity: item?.boxQuantity   || 0,
     }));
   }, [itemOptionsState]);
 
@@ -351,12 +375,12 @@ export default function InvoiceCreate() {
     let subtotal = 0;
     let taxAmount = 0;
     for (const item of itemsList) {
-      const qty       = Number(item?.quantity)  || 0;
-      const price     = Number(item?.unitPrice)  || 0;
-      const taxRate   = Number(item?.taxRate)    || 0;
-      const lineAmt   = qty * price;
-      subtotal   += lineAmt;
-      taxAmount  += lineAmt * (taxRate / 100);
+      const qty     = Number(item?.quantity)  || 0;
+      const price   = Number(item?.unitPrice) || 0;
+      const taxRate = Number(item?.taxRate)   || 0;
+      const lineAmt = qty * price;
+      subtotal  += lineAmt;
+      taxAmount += lineAmt * (taxRate / 100);
     }
     const discountVal = Number(discValue) || 0;
     let discountAmount = 0;
@@ -366,17 +390,17 @@ export default function InvoiceCreate() {
       discountAmount = Math.min(Math.max(discountVal, 0), subtotal);
     }
     const totalAmount = Math.max(0, subtotal + taxAmount - discountAmount);
-    setValue('subtotal',        Number(subtotal.toFixed(2)),        { shouldDirty: false, shouldValidate: false, shouldTouch: false });
-    setValue('taxAmount',       Number(taxAmount.toFixed(2)),       { shouldDirty: false, shouldValidate: false, shouldTouch: false });
-    setValue('discountAmount',  Number(discountAmount.toFixed(2)),  { shouldDirty: false, shouldValidate: false, shouldTouch: false });
-    setValue('totalAmount',     Number(totalAmount.toFixed(2)),     { shouldDirty: false, shouldValidate: false, shouldTouch: false });
+    setValue('subtotal',       Number(subtotal.toFixed(2)),       { shouldDirty: false, shouldValidate: false, shouldTouch: false });
+    setValue('taxAmount',      Number(taxAmount.toFixed(2)),      { shouldDirty: false, shouldValidate: false, shouldTouch: false });
+    setValue('discountAmount', Number(discountAmount.toFixed(2)), { shouldDirty: false, shouldValidate: false, shouldTouch: false });
+    setValue('totalAmount',    Number(totalAmount.toFixed(2)),    { shouldDirty: false, shouldValidate: false, shouldTouch: false });
     return { subtotal, taxAmount, discountAmount, totalAmount };
   }, [setValue]);
 
   const calculateLineAmount = useCallback((item: any) => {
-    const qty   = Number(item?.quantity)  || 0;
-    const rate  = Number(item?.unitPrice) || 0;
-    const tax   = Number(item?.taxRate)   || 0;
+    const qty  = Number(item?.quantity)  || 0;
+    const rate = Number(item?.unitPrice) || 0;
+    const tax  = Number(item?.taxRate)   || 0;
     return qty * rate * (1 + tax / 100);
   }, []);
 
@@ -392,11 +416,11 @@ export default function InvoiceCreate() {
 
   const queueTotalsRecalculation = useCallback(() => {
     totalsRecalc$.current.next({
-      items:    getValues('items')         || [],
-      discType: discountType,
-      discValue: getValues('discountValue') || 0,
+      items:    getValues('items')                               || [],
+      discType: (getValues('discountType') as DiscountType)     || 'percentage',
+      discValue: getValues('discountValue')                     || 0,
     });
-  }, [getValues, discountType]);
+  }, [getValues]);
 
   const watchedDiscountValue = watch('discountValue');
   useEffect(() => { queueTotalsRecalculation(); }, [watchedDiscountValue, discountType, queueTotalsRecalculation]);
@@ -404,7 +428,6 @@ export default function InvoiceCreate() {
 
   useEffect(() => {
     if (preSelectedItems?.length) {
-      console.log('InvoiceCreate useEffect - preSelectedItems:', preSelectedItems);
       setTimeout(() => queueTotalsRecalculation(), 100);
     }
   }, [preSelectedItems, queueTotalsRecalculation]);
@@ -418,6 +441,128 @@ export default function InvoiceCreate() {
   const taxAmount      = watch('taxAmount')      || 0;
   const discountAmount = watch('discountAmount') || 0;
   const totalAmount    = watch('totalAmount')    || 0;
+
+  // ── Stock validation ───────────────────────────────────────────────────────
+  /**
+   * Validates every row in the items table for stock issues.
+   * Returns true if all rows are valid and the form can be saved.
+   * Sets rowErrors for display and shows a summary notification.
+   */
+  const validateItems = useCallback((): boolean => {
+    const items = getValues('items') || [];
+    const newErrors: Record<number, RowError> = {};
+    let hasBlockingErrors = false;
+
+    items.forEach((item: InvoiceItem, index: number) => {
+      const itemName     = item.itemName || '';
+      const quantity     = Number(item.quantity)     || 0;
+      const availableQty = Number(item.availableQty) || 0;
+      const unit         = item.unit || 'units';
+
+      // Rule 1 — No item selected
+      if (!itemName.trim()) {
+        newErrors[index] = {
+          type: 'NO_ITEM',
+          message: `Row ${index + 1}: Please select an item.`,
+          severity: 'error',
+        };
+        hasBlockingErrors = true;
+        return;
+      }
+
+      // Rule 2 — No quantity entered
+      if (quantity <= 0) {
+        newErrors[index] = {
+          type: 'NO_QUANTITY',
+          message: `Row ${index + 1}: "${itemName}" — quantity must be greater than 0.`,
+          severity: 'error',
+        };
+        hasBlockingErrors = true;
+        return;
+      }
+
+      // Rule 3 — Out of stock (availableQty === 0)
+      if (availableQty === 0) {
+        newErrors[index] = {
+          type: 'OUT_OF_STOCK',
+          message: `Row ${index + 1}: "${itemName}" is out of stock and cannot be invoiced.`,
+          severity: 'error',
+        };
+        hasBlockingErrors = true;
+        return;
+      }
+
+      // Rule 4 — Requested quantity exceeds available stock
+      if (quantity > availableQty) {
+        newErrors[index] = {
+          type: 'INSUFFICIENT_STOCK',
+          message: `Row ${index + 1}: "${itemName}" — requested ${quantity} ${unit} but only ${availableQty} ${unit} available.`,
+          severity: 'error',
+        };
+        hasBlockingErrors = true;
+        return;
+      }
+
+      // Rule 5 — Low stock warning (available < 10 after deduction) — non-blocking
+      const remainingAfter = availableQty - quantity;
+      if (availableQty < 10 && availableQty > 0 && quantity <= availableQty) {
+        newErrors[index] = {
+          type: 'LOW_STOCK',
+          message: `Row ${index + 1}: "${itemName}" — low stock. Only ${remainingAfter} ${unit} will remain after this invoice.`,
+          severity: 'warning',
+        };
+        // NOT setting hasBlockingErrors — low stock is a warning, not a block
+      }
+    });
+
+    setRowErrors(newErrors);
+
+    // Show summary notification
+    const errorEntries   = Object.values(newErrors).filter(e => e.severity === 'error');
+    const warningEntries = Object.values(newErrors).filter(e => e.severity === 'warning');
+
+    if (errorEntries.length > 0) {
+      notificationApi.error({
+        message: `${errorEntries.length} stock issue${errorEntries.length > 1 ? 's' : ''} found`,
+        description: (
+          <div style={{ maxHeight: 160, overflowY: 'auto' }}>
+            {errorEntries.map((e, i) => (
+              <div key={i} style={{ marginBottom: 4, fontSize: 12 }}>
+                ❌ {e.message}
+              </div>
+            ))}
+            {warningEntries.map((e, i) => (
+              <div key={`w${i}`} style={{ marginBottom: 4, fontSize: 12, color: '#d46b08' }}>
+                ⚠️ {e.message}
+              </div>
+            ))}
+          </div>
+        ) as any,
+        showProgress: true,
+        pauseOnHover: true,
+        duration: 6,
+      });
+      return false;
+    }
+
+    if (warningEntries.length > 0) {
+      notificationApi.warning({
+        message: `${warningEntries.length} low stock warning${warningEntries.length > 1 ? 's' : ''}`,
+        description: (
+          <div>
+            {warningEntries.map((e, i) => (
+              <div key={i} style={{ fontSize: 12 }}>⚠️ {e.message}</div>
+            ))}
+          </div>
+        ) as any,
+        showProgress: true,
+        pauseOnHover: true,
+      });
+      // Low stock warnings do NOT block saving
+    }
+
+    return !hasBlockingErrors;
+  }, [getValues, notificationApi]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const onCustomerSelect = useCallback((value: string, option: any) => {
@@ -434,11 +579,24 @@ export default function InvoiceCreate() {
     queueTotalsRecalculation();
   }, [move, queueTotalsRecalculation]);
 
-  const addInvoiceItem   = useCallback(() => {
+  const addInvoiceItem = useCallback(() => {
     append({ itemCode: '', itemName: '', description: '', quantity: 0, boxQuantity: 0, itemBoxQuantity: 0, size: '', category: '', unit: '', unitPrice: 0, taxRate: 0, discount: 0, amount: 0, squareFeet: 0, availableQty: 0 });
   }, [append]);
 
-  const handleRemoveItem = useCallback((index: number) => remove(index), [remove]);
+  const handleRemoveItem = useCallback((index: number) => {
+    remove(index);
+    // Clear error for removed row and shift indices
+    setRowErrors(prev => {
+      const next: Record<number, RowError> = {};
+      Object.entries(prev).forEach(([key, val]) => {
+        const k = Number(key);
+        if (k < index) next[k] = val;
+        else if (k > index) next[k - 1] = val;
+        // k === index is removed
+      });
+      return next;
+    });
+  }, [remove]);
 
   const handleDiscountTypeChange = useCallback((type: DiscountType) => {
     setDiscountType(type);
@@ -447,16 +605,34 @@ export default function InvoiceCreate() {
     queueTotalsRecalculation();
   }, [setValue, queueTotalsRecalculation]);
 
-  // AFTER (fixed)
+  // ── Clear a single row's error when item is changed ───────────────────────
+  const clearRowError = useCallback((index: number) => {
+    setRowErrors(prev => {
+      if (!prev[index]) return prev;
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+  }, []);
+
+  // ── Save with validation ──────────────────────────────────────────────────
+  const handleSave = useCallback(() => {
+    // Step 1: validate stock
+    const stockValid = validateItems();
+    if (!stockValid) return; // stop — errors shown in rowErrors + notification
+
+    // Step 2: run react-hook-form validation, then submit
+    handleSubmit(onSubmit, onError)();
+  }, [validateItems, handleSubmit]);
+
   const onSubmit = async (formValues: any) => {
     const userName   = CookieService.get('user_name') || 'Admin';
     const paid       = Number(formValues.paidAmount) || 0;
     const total      = Number(formValues.totalAmount) || 0;
     const balanceDue = Math.max(0, total - paid);
 
-    // Derive correct status from payment state
     let status = formValues.status;
-    if (paid >= total && total > 0)   status = 'PAID';
+    if (paid >= total && total > 0)    status = 'PAID';
     else if (paid > 0 && paid < total) status = 'PARTIALLY_PAID';
 
     await refetch({
@@ -464,14 +640,15 @@ export default function InvoiceCreate() {
         ...formValues,
         invoiceDate:        formValues.invoiceDate?.format?.('YYYY-MM-DD') || formValues.invoiceDate,
         dueDate:            formValues.dueDate?.format?.('YYYY-MM-DD')     || formValues.dueDate,
-        discountPercentage: discountType === 'percentage' ? formValues.discountValue : 0,
+        discountType:       (formValues.discountType as DiscountType) || discountType,
+        discountValue:      formValues.discountValue ?? 0,
         discountAmount:     formValues.discountAmount,
-        paidAmount:         paid,        // ✅ uses actual value
-        balanceDue:         balanceDue,  // ✅ total - paid
-        status,                          // ✅ auto-corrected
+        paidAmount:         paid,
+        balanceDue,
+        status,
         createdBy:          userName,
         updatedBy:          userName,
-        paymentMethod:        formValues.paymentMethod || 'UPI',
+        paymentMethod:      formValues.paymentMethod || 'UPI',
       }
     });
   };
@@ -544,7 +721,7 @@ export default function InvoiceCreate() {
             )} />
           </Form.Item>
         );
-      default: // STRING + fallback
+      default:
         return (
           <Form.Item key={field.id} label={field.fieldLabel} required={field.required}>
             <Controller {...commonProps} render={({ field: f }) => (
@@ -553,7 +730,7 @@ export default function InvoiceCreate() {
           </Form.Item>
         );
     }
-  };  
+  };
 
   const watchedPaidAmount = watch('paidAmount');
 
@@ -640,23 +817,23 @@ export default function InvoiceCreate() {
               <Controller name="status" control={control}
                 render={({ field }) => (
                   <Select {...field} size="large" suffixIcon={<IoIosArrowDown size={20} />} options={[
-                    { label: 'Draft',     value: 'DRAFT' },
-                    { label: 'Paid',      value: 'PAID' },
+                    { label: 'Draft',          value: 'DRAFT' },
+                    { label: 'Paid',           value: 'PAID' },
                     { label: 'Partially Paid', value: 'PARTIALLY_PAID' },
-                    { label: 'Cancelled', value: 'CANCELLED' },
+                    { label: 'Cancelled',      value: 'CANCELLED' },
                   ]} />
                 )}
               />
             </Form.Item>
 
-            {/* PAYMENT TYPE */}
+            {/* PAYMENT METHOD */}
             <Form.Item label="Payment Method">
               <Controller name="paymentMethod" control={control}
                 render={({ field }) => (
                   <Select {...field} size="large" suffixIcon={<IoIosArrowDown size={20} />} options={[
-                    { label: 'UPI',       value: 'UPI' },
-                    { label: 'Cash',      value: 'Cash' },
-                    { label: 'Card',      value: 'Card' },
+                    { label: 'UPI',         value: 'UPI' },
+                    { label: 'Cash',        value: 'Cash' },
+                    { label: 'Card',        value: 'Card' },
                     { label: 'Net Banking', value: 'Net Banking' },
                   ]} />
                 )}
@@ -674,10 +851,7 @@ export default function InvoiceCreate() {
                     style={{ width: '100%' }}
                     prefix={<Rupee>₹</Rupee>}
                     placeholder="0.00"
-                    onChange={value => {
-                      const val = Number(value) || 0;
-                      field.onChange(val);
-                    }}
+                    onChange={value => { field.onChange(Number(value) || 0); }}
                   />
                 )}
               />
@@ -686,8 +860,25 @@ export default function InvoiceCreate() {
             <Divider />
 
             {/* ── Items table ── */}
-            <div style={{ marginBottom: 12, fontWeight: 600 }}>Invoice Items</div>
+            <div style={{ marginBottom: 12, fontWeight: 600 }}>
+              Invoice Items
+              {Object.keys(rowErrors).length > 0 && (
+                <span style={{
+                  marginLeft: 12,
+                  fontSize: 12,
+                  color: Object.values(rowErrors).some(e => e.severity === 'error') ? '#cf1322' : '#d46b08',
+                  fontWeight: 400,
+                }}>
+                  {Object.values(rowErrors).filter(e => e.severity === 'error').length > 0
+                    ? `⚠ ${Object.values(rowErrors).filter(e => e.severity === 'error').length} error(s) — please fix before saving`
+                    : `⚠ ${Object.values(rowErrors).filter(e => e.severity === 'warning').length} low stock warning(s)`
+                  }
+                </span>
+              )}
+            </div>
+
             <div style={{ border: '1px solid #e8e8e8', borderRadius: 8, overflow: 'hidden' }}>
+              {/* Table header */}
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: '25px 2.5fr 1.2fr 1.8fr 1.5fr 1.2fr 1.5fr 52px',
@@ -729,6 +920,8 @@ export default function InvoiceCreate() {
                           canRemove={fields.length > 1}
                           calculateLineAmount={calculateLineAmount}
                           calculateSquareFeet={calculateSquareFeet}
+                          rowError={rowErrors[index]}
+                          onClearRowError={clearRowError}
                         />
                       ))}
                       {dropProvided.placeholder}
@@ -742,24 +935,21 @@ export default function InvoiceCreate() {
               <Button icon={<MdAddBox />} onClick={addInvoiceItem}>Add New Row</Button>
             </div>
 
-            {/* ── Totals Section (matches PurchaseCreate TotalsCard) ── */}
+            {/* ── Totals ── */}
             <TotalsWrapper>
               <TotalsCard>
                 <TotalsHeader>Invoice Summary</TotalsHeader>
 
-                {/* Subtotal */}
                 <TotalsRow>
                   <TotalsLabel>Subtotal</TotalsLabel>
                   <TotalsValue><Rupee>₹ </Rupee>{subtotal.toFixed(2)}</TotalsValue>
                 </TotalsRow>
 
-                {/* Tax */}
                 <TotalsRow highlight>
                   <TotalsLabel>Tax</TotalsLabel>
-                  <TotalsValue style={{ color: '#d46b08' }}>+ <Rupee>₹ </Rupee>{taxAmount.toLocaleString('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TotalsValue>
+                  <TotalsValue style={{ color: '#d46b08' }}>+ <Rupee>₹ </Rupee>{taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TotalsValue>
                 </TotalsRow>
 
-                {/* Discount row — input + toggle inline */}
                 <TotalsRow discount>
                   <TotalsLabel>Discount</TotalsLabel>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -769,17 +959,23 @@ export default function InvoiceCreate() {
                       render={({ field }) => (
                         <InputNumber
                           {...field}
+                          value={field.value ?? 0}
                           size="small"
                           min={0}
                           max={discountType === 'percentage' ? 100 : subtotal + taxAmount}
                           style={{ width: 80 }}
                           onChange={value => {
-                            const val = Number(value) || 0;
-                            field.onChange(
-                              discountType === 'percentage'
-                                ? Math.min(Math.max(val, 0), 100)
-                                : Math.min(Math.max(val, 0), subtotal + taxAmount)
-                            );
+                            const val = value === null || value === undefined ? 0 : Number(value);
+                            const currentType = (getValues('discountType') as DiscountType) || discountType;
+                            const clampedVal = currentType === 'percentage'
+                              ? Math.min(Math.max(val, 0), 100)
+                              : Math.min(Math.max(val, 0), subtotal + taxAmount);
+                            field.onChange(clampedVal);
+                            totalsRecalc$.current.next({
+                              items:     getValues('items') || [],
+                              discType:  currentType,
+                              discValue: clampedVal,
+                            });
                           }}
                         />
                       )}
@@ -788,45 +984,36 @@ export default function InvoiceCreate() {
                       <button type="button"
                         className={discountType === 'percentage' ? 'active' : ''}
                         onClick={() => handleDiscountTypeChange('percentage')}
-                        title="Percentage">
-                        %
-                      </button>
+                        title="Percentage">%</button>
                       <button type="button"
                         className={discountType === 'amount' ? 'active' : ''}
                         onClick={() => handleDiscountTypeChange('amount')}
-                        title="Fixed Amount">
-                        <Rupee>₹</Rupee>
-                      </button>
+                        title="Fixed Amount"><Rupee>₹</Rupee></button>
                     </DiscountTypeToggle>
                   </div>
                 </TotalsRow>
 
-                {/* Discount applied */}
                 {discountAmount > 0 && (
                   <TotalsRow discount>
                     <TotalsLabel>
                       Discount applied
                       <span style={{ fontSize: 11, color: '#8c8c8c', marginLeft: 6 }}>
-                        {discountType === 'percentage'
-                          ? `(${watch('discountValue') || 0}%)`
-                          : '(fixed)'}
+                        {discountType === 'percentage' ? `(${watch('discountValue') || 0}%)` : '(fixed)'}
                       </span>
                     </TotalsLabel>
-                    <TotalsValue>− <Rupee>₹ </Rupee>{discountAmount.toLocaleString('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TotalsValue>
+                    <TotalsValue>− <Rupee>₹ </Rupee>{discountAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TotalsValue>
                   </TotalsRow>
                 )}
 
-                {/* Paid Amount — show only when > 0 */}
                 {(watch('paidAmount') || 0) > 0 && (
                   <TotalsRow highlight>
                     <TotalsLabel>Paid Amount</TotalsLabel>
                     <TotalsValue style={{ color: '#237804' }}>
-                      − <Rupee>₹ </Rupee>{(watch('paidAmount') || 0).toLocaleString('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      − <Rupee>₹ </Rupee>{(watch('paidAmount') || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </TotalsValue>
                   </TotalsRow>
                 )}
 
-                {/* Balance Due — always show */}
                 <TotalsRow style={{
                   background: Math.max(0, totalAmount - (watch('paidAmount') || 0)) === 0 ? '#f6ffed' : '#fff1f0'
                 }}>
@@ -836,14 +1023,13 @@ export default function InvoiceCreate() {
                     color: Math.max(0, totalAmount - (watch('paidAmount') || 0)) === 0 ? '#237804' : '#cf1322'
                   }}>
                     <Rupee>₹ </Rupee>
-                    {Math.max(0, totalAmount - (watch('paidAmount') || 0)).toLocaleString('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {Math.max(0, totalAmount - (watch('paidAmount') || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </TotalsValue>
                 </TotalsRow>
 
-                {/* Grand Total */}
                 <TotalsRow grand>
                   <TotalsLabel>Total</TotalsLabel>
-                  <TotalsValue><Rupee>₹ </Rupee>{totalAmount.toLocaleString('en-IN',{ minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TotalsValue>
+                  <TotalsValue><Rupee>₹ </Rupee>{totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TotalsValue>
                 </TotalsRow>
                 <TotalsRow>
                   <TotalsLabel>Amount in Words</TotalsLabel>
@@ -881,8 +1067,15 @@ export default function InvoiceCreate() {
       </Content>
 
       <Footer>
-        <Button variant="solid" color="primary" className="w-[150px]" htmlType="submit"
-          loading={loading} onClick={handleSubmit(onSubmit, onError)}>
+        {/* Save now calls handleSave which validates stock first */}
+        <Button
+          variant="solid"
+          color="primary"
+          className="w-[150px]"
+          htmlType="button"
+          loading={loading}
+          onClick={handleSave}
+        >
           Save
         </Button>
         <Button variant="outlined" color="danger" className="w-[150px]" onClick={() => navigate(-1)}>
@@ -893,18 +1086,11 @@ export default function InvoiceCreate() {
   );
 }
 
-// ─── Number to Words Helper ─────────────────────────────────────────────────
+// ─── Number to Words Helper ───────────────────────────────────────────────────
 function numberToWords(num: number): string {
   if (num === 0) return 'Zero';
-
-  const a = [
-    '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven',
-    'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen',
-    'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'
-  ];
-
+  const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
   const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-
   const inWords = (n: number): string => {
     if (n < 20) return a[n];
     if (n < 100) return b[Math.floor(n / 10)] + ' ' + a[n % 10];
@@ -913,68 +1099,53 @@ function numberToWords(num: number): string {
     if (n < 10000000) return inWords(Math.floor(n / 100000)) + ' Lakh ' + inWords(n % 100000);
     return inWords(Math.floor(n / 10000000)) + ' Crore ' + inWords(n % 10000000);
   };
-
   return inWords(Math.floor(num)).trim() + ' Rupees Only';
 }
 
-// ─── Helper: parse size string → sq ft per single tile/unit ─────────────────
+// ─── Size helper ──────────────────────────────────────────────────────────────
 function parseSizeToSqFtPerUnit(size: string | undefined | null): number {
   if (!size) return 0;
   const sizeStr = size.toLowerCase().trim();
   const unitMatch = sizeStr.match(/-(in|mm|cm|m)$/);
   const unit = unitMatch ? unitMatch[1] : 'in';
   const cleaned = sizeStr.replace(/-(in|mm|cm|m)$/, '');
-  const parts = cleaned
-    .split(/[xX×\s]+/)
-    .map(s => parseFloat(s.trim()))
-    .filter(n => !isNaN(n));
+  const parts = cleaned.split(/[xX×\s]+/).map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
   if (parts.length < 2) return 0;
-  let length = parts[0];
-  let width = parts[1];
+  let length = parts[0]; let width = parts[1];
   switch (unit) {
-    case 'mm':  length /= 304.8;  width /= 304.8;  break;
-    case 'cm':  length /= 30.48;  width /= 30.48;  break;
-    case 'm':   length *= 3.28084; width *= 3.28084; break;
-    default:    length /= 12;     width /= 12;      break;
+    case 'mm': length /= 304.8; width /= 304.8; break;
+    case 'cm': length /= 30.48; width /= 30.48; break;
+    case 'm':  length *= 3.28084; width *= 3.28084; break;
+    default:   length /= 12; width /= 12; break;
   }
   return length * width;
 }
 
-// ─── InvoiceItemRow ───────────────────────────────────────────────────────────
-
+// ─── Constants ────────────────────────────────────────────────────────────────
 const PIECE_BASED_CATEGORIES = ['sanitaryware', 'sanitary ware', 'pieces', 'piece'];
 
 const isSanitaryware = (category?: string): boolean =>
   PIECE_BASED_CATEGORIES.some(c => c === (category || '').toLowerCase().trim());
 
 const calculateSquareFeet = (item: {
-  size?: string;
-  boxQuantity?: number;
-  itemBoxQuantity?: number;
-  category?: string;
+  size?: string; boxQuantity?: number; itemBoxQuantity?: number; category?: string;
 }): number => {
   if (!item.size) return 0;
   if (isSanitaryware(item.category)) {
-    const tilesPerBox = Number(item.itemBoxQuantity) || 0;
-    const numberOfBoxes = Number(item.boxQuantity) || 0;
-    return tilesPerBox && numberOfBoxes ? tilesPerBox * numberOfBoxes : 0;
+    return (Number(item.itemBoxQuantity) || 0) * (Number(item.boxQuantity) || 0);
   }
   const sizeStr = item.size.toLowerCase().trim();
   const unitMatch = sizeStr.match(/-(in|mm|cm|m)$/);
   const unit = unitMatch ? unitMatch[1] : 'in';
   const cleaned = sizeStr.replace(/-(in|mm|cm|m)$/g, '');
-  const parts = cleaned
-    .split(/[xX×]/)
-    .map(s => parseFloat(s.trim()))
-    .filter(n => !isNaN(n));
+  const parts = cleaned.split(/[xX×]/).map(s => parseFloat(s.trim())).filter(n => !isNaN(n));
   if (parts.length < 2) return 0;
-  let length = parts[0];
-  let width = parts[1];
+  let length = parts[0]; let width = parts[1];
   switch (unit) {
-    case 'mm':  length /= 304.8;  width /= 304.8;  break;
-    case 'cm':  length /= 30.48;  width /= 30.48;  break;
-    case 'm':   length *= 3.28084; width *= 3.28084; break;
-    default:    length /= 12;     width /= 12;      break;
+    case 'mm': length /= 304.8; width /= 304.8; break;
+    case 'cm': length /= 30.48; width /= 30.48; break;
+    case 'm':  length *= 3.28084; width *= 3.28084; break;
+    default:   length /= 12; width /= 12; break;
   }
   const sqFtPerTile = length * width;
   const tilesPerBox = Number(item.itemBoxQuantity) || 0;
@@ -983,9 +1154,24 @@ const calculateSquareFeet = (item: {
   return sqFtPerTile * tilesPerBox * numberOfBoxes;
 };
 
+// ─── Row error color helpers ──────────────────────────────────────────────────
+const rowErrorBorderColor = (error: { severity: 'error' | 'warning' } | undefined): string => {
+  if (!error) return '#f0f0f0';
+  return error.severity === 'error' ? '#ff4d4f' : '#faad14';
+};
+
+const rowErrorBg = (error: { severity: 'error' | 'warning' } | undefined): string => {
+  if (!error) return 'transparent';
+  return error.severity === 'error' ? '#fff2f0' : '#fffbe6';
+};
+
+// ─── InvoiceItemRow ───────────────────────────────────────────────────────────
 const InvoiceItemRow = memo(function InvoiceItemRow({
   rowId, index, control, register, setValue, getValues,
-  itemOptions, onSearchItems, onScrollItems, onQueueTotals, onRemoveRow, canRemove, calculateLineAmount, calculateSquareFeet,
+  itemOptions, onSearchItems, onScrollItems, onQueueTotals, onRemoveRow, canRemove,
+  calculateLineAmount, calculateSquareFeet,
+  rowError,       // ← NEW: RowError | undefined
+  onClearRowError, // ← NEW: (index: number) => void
 }: any) {
   const navigate = useNavigate();
   const notificationApi = useNotification();
@@ -993,25 +1179,27 @@ const InvoiceItemRow = memo(function InvoiceItemRow({
   const watchedItem = useWatch({ control, name: `items.${index}` });
 
   const rowCalc = {
-    quantity: Number(watchedItem?.quantity) || 0,
-    boxQuantity: Number(watchedItem?.boxQuantity) || 0,
+    quantity:        Number(watchedItem?.quantity)        || 0,
+    boxQuantity:     Number(watchedItem?.boxQuantity)     || 0,
     itemBoxQuantity: Number(watchedItem?.itemBoxQuantity) || 0,
-    size: watchedItem?.size || '',
-    category: watchedItem?.category || '',
-    unitPrice: Number(watchedItem?.unitPrice) || 0,
-    taxRate: Number(watchedItem?.taxRate) || 0,
-    unit: watchedItem?.unit || '',
-    availableQty: watchedItem?.availableQty || 0,
+    size:            watchedItem?.size     || '',
+    category:        watchedItem?.category || '',
+    unitPrice:       Number(watchedItem?.unitPrice) || 0,
+    taxRate:         Number(watchedItem?.taxRate)   || 0,
+    unit:            watchedItem?.unit     || '',
+    availableQty:    watchedItem?.availableQty || 0,
   };
 
   useEffect(() => {
     const amountValue = Number(calculateLineAmount(rowCalc).toFixed(2));
     setValue(`items.${index}.amount`, amountValue, { shouldDirty: false, shouldValidate: false, shouldTouch: false });
-  }, [rowCalc.quantity, rowCalc.boxQuantity, rowCalc.unitPrice, rowCalc.taxRate, index, setValue, calculateLineAmount]);
+  }, [rowCalc.quantity, rowCalc.boxQuantity, rowCalc.unitPrice, rowCalc.taxRate]);
 
-  const amount = calculateLineAmount(rowCalc);
-  const squareFeet = calculateSquareFeet(rowCalc);
+  const amount      = calculateLineAmount(rowCalc);
+  const squareFeet  = calculateSquareFeet(rowCalc);
 
+  const hasError   = !!rowError && rowError.severity === 'error';
+  const hasWarning = !!rowError && rowError.severity === 'warning';
 
   return (
     <Draggable draggableId={rowId} index={index}>
@@ -1019,241 +1207,263 @@ const InvoiceItemRow = memo(function InvoiceItemRow({
         <div
           ref={dragProvided.innerRef}
           {...dragProvided.draggableProps}
-          style={{
+          style={{ ...dragProvided.draggableProps.style }}
+        >
+          {/* ── Main row ── */}
+          <div style={{
             display: 'grid',
             gridTemplateColumns: '25px 2.5fr 1.2fr 1.8fr 1.5fr 1.2fr 1.5fr 52px',
             padding: '10px 12px',
-            borderBottom: '1px solid #f0f0f0',
+            borderBottom: rowError ? 'none' : '1px solid #f0f0f0',
+            borderLeft: `3px solid ${rowErrorBorderColor(rowError)}`,
+            background: rowErrorBg(rowError),
             alignItems: 'center',
             gap: 8,
-            ...dragProvided.draggableProps.style,
-          }}
-        >
-          {/* Drag handle */}
-          <div {...dragProvided.dragHandleProps} style={{ cursor: 'grab', display: 'flex', justifyContent: 'center' }}>
-            <MdDragIndicator size={18} color="#8c8c8c" />
-          </div>
+            transition: 'border-color 0.2s, background 0.2s',
+          }}>
+            {/* Drag handle */}
+            <div {...dragProvided.dragHandleProps} style={{ cursor: 'grab', display: 'flex', justifyContent: 'center' }}>
+              <MdDragIndicator size={18} color="#8c8c8c" />
+            </div>
 
-          {/* Item select */}
-          <Controller name={`items.${index}.itemName`} control={control} rules={{ required: 'Item is required' }}
-            render={({ field }) => (
-              <Select {...field} showSearch allowClear
-                suffixIcon={<IoIosArrowDown size={20} />}
-                placeholder="Select Item"
-                options={itemOptions}
-                filterOption={false}
-                onSearch={onSearchItems}
-                onClear={() => onSearchItems('')}
-                onPopupScroll={onScrollItems}
-                listHeight={320}
-                popupMatchSelectWidth={350}
-                optionRender={(option: any) => {
-                  const item = option.data;
-                  const isOutOfStock = item.quantity === 0;
-                  const isLowStock = item.quantity > 0 && item.quantity < 10;
-                  return (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
-                      <div>
-                        <div style={{ fontWeight: 500 }}>{item.itemName || item.label}</div>
-                        <div style={{ fontSize: 11, color: '#888' }}>{item.category} • {item.unit}</div>
-                        {isOutOfStock && (
-                          <div style={{ fontSize: 11, color: '#fff', background: '#ff4d4f', padding: '1px 6px', borderRadius: 3, marginTop: 2 }}>
-                            Out of Stock
-                          </div>
-                        )}
-                        {isLowStock && (
-                          <div style={{ fontSize: 11, color: '#fff', background: '#faad14', padding: '1px 6px', borderRadius: 3, marginTop: 2 }}>
-                            Low Stock: {item.quantity}
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontWeight: 500, color: '#1677ff' }}><Rupee>₹</Rupee>{item.sellingPrice || 0}</div>
-                        <div style={{ fontSize: 11, color: '#888' }}>{item.itemCode}</div>
-                        {!isOutOfStock && !isLowStock && (
-                          <div style={{ fontSize: 11, color: '#52c41a' }}>Stock: {item.quantity}</div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                }}
-                onChange={(_val, option: any) => {
-                  const nextUnit     = option?.unit         || '';
-                  const sellingPrice = option?.sellingPrice || 0;
-                  const taxRate      = option?.taxRate      || 0;
-                  const availableQty = option?.quantity     || 0;
-                  const isOutOfStock = availableQty === 0;
-                  field.onChange(option?.itemName || '');
-                  setValue(`items.${index}.itemCode`,    option?.itemCode || '');
-                  setValue(`items.${index}.unit`,        nextUnit);
-                  setValue(`items.${index}.unitPrice`,   sellingPrice);
-                  setValue(`items.${index}.taxRate`,     taxRate);
-                  setValue(`items.${index}.availableQty`, availableQty);
-                  setValue(`items.${index}.size`,        option?.size || '');
-                  setValue(`items.${index}.itemBoxQuantity`, option?.itemBoxQuantity || 0);
-                  setValue(`items.${index}.category`,    option?.category || '');
-                  if (isOutOfStock) {
-                    notificationApi.warning({
-                      message: 'Out of Stock',
-                      description: `${option?.itemName || option?.label} is out of stock.`,
-                      showProgress: true,
-                      pauseOnHover: true,
-                    });
-                  }
-                  onQueueTotals();
-                }}
-                value={field.value || undefined}
-                popupRender={menu => (
-                  <>
-                    {menu}
-                    <Divider style={{ margin: '4px 0' }} />
-                    <div className="flex gap-2 items-center justify-center">
-                      <Button size="small" type="primary"
-                        icon={<MdAddBox size={18} style={{ marginTop: 4 }} />}
-                        onClick={e => { e.stopPropagation(); navigate('/item/create'); }}>
-                        Create Item
-                      </Button>
-                    </div>
-                  </>
-                )}
-              />
-            )}
-          />
-
-          {/* Hidden fields */}
-          <input type="hidden" {...register(`items.${index}.itemCode`)} />
-          <input type="hidden" {...register(`items.${index}.unit`)} />
-          <input type="hidden" {...register(`items.${index}.amount`)} />
-          <input type="hidden" {...register(`items.${index}.size`)} />
-          <input type="hidden" {...register(`items.${index}.category`)} />
-          <input type="hidden" {...register(`items.${index}.itemBoxQuantity`)} />
-
-          {/* Box Quantity */}
-          <Controller name={`items.${index}.boxQuantity`} control={control}
-            render={({ field }) => (
-              <Tooltip title={rowCalc.size ? `Size: ${rowCalc.size} | Tiles per box: ${rowCalc.itemBoxQuantity}` : 'Select an item to enable sq ft calculation'}>
-                <InputNumber
+            {/* Item select */}
+            <Controller name={`items.${index}.itemName`} control={control} rules={{ required: 'Item is required' }}
+              render={({ field }) => (
+                <Select
                   {...field}
-                  min={0}
-                  inputMode="numeric"
-                  style={{ width: '100%' }}
-                  controls={{ upIcon: <span style={{ fontSize: 14, lineHeight: 1 }}>+</span>, downIcon: <span style={{ fontSize: 14, lineHeight: 1 }}>−</span> }}
-                  onChange={(value) => {
-                    const nextBoxQty = Number(value) || 0;
-                    const tilesPerBox = rowCalc.itemBoxQuantity || 0;
-
-                    let nextQty = 0;
-
-                    if (isSanitaryware(rowCalc.category)) {
-                      nextQty = nextBoxQty * tilesPerBox;
-                    } else {
-                      const sqFtPerTile = parseSizeToSqFtPerUnit(rowCalc.size);
-                      nextQty = Number((sqFtPerTile * tilesPerBox * nextBoxQty).toFixed(3));
-                    }
-
-                    if (rowCalc.availableQty > 0 && nextQty > rowCalc.availableQty) {
+                  showSearch
+                  allowClear
+                  suffixIcon={<IoIosArrowDown size={20} />}
+                  placeholder="Select Item"
+                  options={itemOptions}
+                  filterOption={false}
+                  onSearch={onSearchItems}
+                  onClear={() => onSearchItems('')}
+                  onPopupScroll={onScrollItems}
+                  listHeight={320}
+                  popupMatchSelectWidth={350}
+                  status={hasError && !watchedItem?.itemName ? 'error' : undefined}
+                  optionRender={(option: any) => {
+                    const item = option.data;
+                    const isOutOfStock = item.quantity === 0;
+                    const isLowStock   = item.quantity > 0 && item.quantity < 10;
+                    return (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                        <div>
+                          <div style={{ fontWeight: 500 }}>{item.itemName || item.label}</div>
+                          <div style={{ fontSize: 11, color: '#888' }}>{item.category} • {item.unit}</div>
+                          {isOutOfStock && (
+                            <div style={{ fontSize: 11, color: '#fff', background: '#ff4d4f', padding: '1px 6px', borderRadius: 3, marginTop: 2 }}>Out of Stock</div>
+                          )}
+                          {isLowStock && (
+                            <div style={{ fontSize: 11, color: '#fff', background: '#faad14', padding: '1px 6px', borderRadius: 3, marginTop: 2 }}>Low Stock: {item.quantity}</div>
+                          )}
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontWeight: 500, color: '#1677ff' }}><Rupee>₹</Rupee>{item.sellingPrice || 0}</div>
+                          <div style={{ fontSize: 11, color: '#888' }}>{item.itemCode}</div>
+                          {!isOutOfStock && !isLowStock && (
+                            <div style={{ fontSize: 11, color: '#52c41a' }}>Stock: {item.quantity}</div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }}
+                  onChange={(_val, option: any) => {
+                    const nextUnit     = option?.unit         || '';
+                    const sellingPrice = option?.sellingPrice || 0;
+                    const taxRate      = option?.taxRate      || 0;
+                    const availableQty = option?.quantity     || 0;
+                    const isOutOfStock = availableQty === 0;
+                    field.onChange(option?.itemName || '');
+                    setValue(`items.${index}.itemCode`,        option?.itemCode        || '');
+                    setValue(`items.${index}.unit`,            nextUnit);
+                    setValue(`items.${index}.unitPrice`,       sellingPrice);
+                    setValue(`items.${index}.taxRate`,         taxRate);
+                    setValue(`items.${index}.availableQty`,    availableQty);
+                    setValue(`items.${index}.size`,            option?.size            || '');
+                    setValue(`items.${index}.itemBoxQuantity`, option?.itemBoxQuantity || 0);
+                    setValue(`items.${index}.category`,        option?.category        || '');
+                    onClearRowError(index); // clear error when item is re-selected
+                    if (isOutOfStock) {
                       notificationApi.warning({
-                        message: 'Insufficient Stock',
-                        description: `Only ${rowCalc.availableQty} ${rowCalc.unit} available in stock.`,
+                        message: 'Out of Stock',
+                        description: `${option?.itemName || option?.label} is out of stock.`,
                         showProgress: true,
                         pauseOnHover: true,
                       });
                     }
-
-                    setValue(`items.${index}.quantity`, nextQty, {
-                      shouldDirty: false, shouldValidate: false, shouldTouch: false,
-                    });
-                    field.onChange(nextBoxQty);
                     onQueueTotals();
                   }}
+                  value={field.value || undefined}
+                  popupRender={menu => (
+                    <>
+                      {menu}
+                      <Divider style={{ margin: '4px 0' }} />
+                      <div className="flex gap-2 items-center justify-center">
+                        <Button size="small" type="primary"
+                          icon={<MdAddBox size={18} style={{ marginTop: 4 }} />}
+                          onClick={e => { e.stopPropagation(); navigate('/item/create'); }}>
+                          Create Item
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 />
-              </Tooltip>
-            )}
-          />
+              )}
+            />
 
-          {/* Quantity */}
-          <Controller name={`items.${index}.quantity`} control={control}
-            render={({ field }) => (
-              <Tooltip title={rowCalc.availableQty > 0 ? `Available: ${rowCalc.availableQty} ${rowCalc.unit}` : ''}>
-                <InputNumber
-                  {...field}
-                  inputMode="numeric"
-                  min={1}
-                  max={rowCalc.availableQty > 0 ? rowCalc.availableQty : undefined}
-                  style={{ width: '100%', ...(rowCalc.availableQty === 0 ? { borderColor: '#ff4d4f' } : {}) }}
-                  suffix={<span className='text-[11px]'>{rowCalc.unit}</span>}
-                  status={rowCalc.availableQty === 0 ? 'error' : undefined}
-                  onChange={(value) => {
-                    const nextQty = Number(value) || 1;
-                    if (rowCalc.availableQty > 0 && nextQty > rowCalc.availableQty) {
-                      notificationApi.warning({
-                        message: 'Insufficient Stock',
-                        description: `Only ${rowCalc.availableQty} ${rowCalc.unit} available in stock.`,
-                        showProgress: true,
-                        pauseOnHover: true,
-                      });
+            {/* Hidden fields */}
+            <input type="hidden" {...register(`items.${index}.itemCode`)} />
+            <input type="hidden" {...register(`items.${index}.unit`)} />
+            <input type="hidden" {...register(`items.${index}.amount`)} />
+            <input type="hidden" {...register(`items.${index}.size`)} />
+            <input type="hidden" {...register(`items.${index}.category`)} />
+            <input type="hidden" {...register(`items.${index}.itemBoxQuantity`)} />
+
+            {/* Box Quantity */}
+            <Controller name={`items.${index}.boxQuantity`} control={control}
+              render={({ field }) => (
+                <Tooltip title={rowCalc.size ? `Size: ${rowCalc.size} | Tiles per box: ${rowCalc.itemBoxQuantity}` : 'Select an item to enable sq ft calculation'}>
+                  <InputNumber
+                    {...field}
+                    min={0}
+                    inputMode="numeric"
+                    style={{ width: '100%' }}
+                    controls={{ upIcon: <span style={{ fontSize: 14, lineHeight: 1 }}>+</span>, downIcon: <span style={{ fontSize: 14, lineHeight: 1 }}>−</span> }}
+                    onChange={(value) => {
+                      const nextBoxQty  = Number(value) || 0;
+                      const tilesPerBox = rowCalc.itemBoxQuantity || 0;
+                      let nextQty = 0;
+                      if (isSanitaryware(rowCalc.category)) {
+                        nextQty = nextBoxQty * tilesPerBox;
+                      } else {
+                        const sqFtPerTile = parseSizeToSqFtPerUnit(rowCalc.size);
+                        nextQty = Number((sqFtPerTile * tilesPerBox * nextBoxQty).toFixed(3));
+                      }
+                      if (rowCalc.availableQty > 0 && nextQty > rowCalc.availableQty) {
+                        notificationApi.warning({
+                          message: 'Insufficient Stock',
+                          description: `Only ${rowCalc.availableQty} ${rowCalc.unit} available in stock.`,
+                          showProgress: true, pauseOnHover: true,
+                        });
+                      }
+                      setValue(`items.${index}.quantity`, nextQty, { shouldDirty: false, shouldValidate: false, shouldTouch: false });
+                      field.onChange(nextBoxQty);
+                      onClearRowError(index);
+                      onQueueTotals();
+                    }}
+                  />
+                </Tooltip>
+              )}
+            />
+
+            {/* Quantity */}
+            <Controller name={`items.${index}.quantity`} control={control}
+              render={({ field }) => (
+                <Tooltip title={rowCalc.availableQty > 0 ? `Available: ${rowCalc.availableQty} ${rowCalc.unit}` : ''}>
+                  <InputNumber
+                    {...field}
+                    inputMode="numeric"
+                    min={1}
+                    max={rowCalc.availableQty > 0 ? rowCalc.availableQty : undefined}
+                    style={{
+                      width: '100%',
+                      ...(hasError && rowCalc.quantity > rowCalc.availableQty ? { borderColor: '#ff4d4f' } : {}),
+                      ...(rowCalc.availableQty === 0 ? { borderColor: '#ff4d4f' } : {}),
+                    }}
+                    suffix={<span className='text-[11px]'>{rowCalc.unit}</span>}
+                    status={
+                      (hasError && (rowCalc.quantity <= 0 || rowCalc.quantity > rowCalc.availableQty)) ||
+                      rowCalc.availableQty === 0
+                        ? 'error'
+                        : hasWarning
+                        ? 'warning'
+                        : undefined
                     }
-                    const tilesPerBox = rowCalc.itemBoxQuantity || 0;
-                    let derivedBoxQty = 0;
-                    if (isSanitaryware(rowCalc.category)) {
-                      derivedBoxQty = tilesPerBox > 0
-                        ? Math.round((nextQty / tilesPerBox) * 100) / 100
-                        : 0;
-                    } else {
-                      const sqFtPerTile = parseSizeToSqFtPerUnit(rowCalc.size);
-                      const sqFtPerBox = sqFtPerTile * tilesPerBox;
-                      derivedBoxQty = sqFtPerBox > 0
-                        ? Math.round((nextQty / sqFtPerBox) * 100) / 100
-                        : 0;
-                    }
-                    setValue(`items.${index}.boxQuantity`, derivedBoxQty, { shouldDirty: false, shouldValidate: false, shouldTouch: false });
-                    field.onChange(nextQty); onQueueTotals();
-                  }}
+                    onChange={(value) => {
+                      const nextQty = Number(value) || 1;
+                      if (rowCalc.availableQty > 0 && nextQty > rowCalc.availableQty) {
+                        notificationApi.warning({
+                          message: 'Insufficient Stock',
+                          description: `Only ${rowCalc.availableQty} ${rowCalc.unit} available in stock.`,
+                          showProgress: true, pauseOnHover: true,
+                        });
+                      }
+                      const tilesPerBox = rowCalc.itemBoxQuantity || 0;
+                      let derivedBoxQty = 0;
+                      if (isSanitaryware(rowCalc.category)) {
+                        derivedBoxQty = tilesPerBox > 0 ? Math.round((nextQty / tilesPerBox) * 100) / 100 : 0;
+                      } else {
+                        const sqFtPerTile = parseSizeToSqFtPerUnit(rowCalc.size);
+                        const sqFtPerBox  = sqFtPerTile * tilesPerBox;
+                        derivedBoxQty = sqFtPerBox > 0 ? Math.round((nextQty / sqFtPerBox) * 100) / 100 : 0;
+                      }
+                      setValue(`items.${index}.boxQuantity`, derivedBoxQty, { shouldDirty: false, shouldValidate: false, shouldTouch: false });
+                      field.onChange(nextQty);
+                      onClearRowError(index);
+                      onQueueTotals();
+                    }}
+                  />
+                </Tooltip>
+              )}
+            />
+
+            {/* Unit Price */}
+            <Controller name={`items.${index}.unitPrice`} control={control}
+              render={({ field }) => (
+                <InputNumber {...field} style={{ width: '100%' }} inputMode="numeric" min={0}
+                  prefix={<Rupee>₹</Rupee>}
+                  onChange={value => { field.onChange(Number(value) || 0); onQueueTotals(); }}
                 />
-              </Tooltip>
-            )}
-          />
+              )}
+            />
 
-          {/* Unit Price */}
-          <Controller name={`items.${index}.unitPrice`} control={control}
-            render={({ field }) => (
-              <InputNumber {...field} style={{ width: '100%' }} inputMode="numeric" min={0}
-                prefix={<Rupee>₹</Rupee>}
-                onChange={value => {
-                  const next = Number(value) || 0;
-                  field.onChange(next); onQueueTotals();
-                }}
-              />
-            )}
-          />
+            {/* Tax Rate */}
+            <Controller name={`items.${index}.taxRate`} control={control}
+              render={({ field }) => (
+                <InputNumber {...field} min={0} max={100} style={{ width: '100%' }}
+                  addonAfter="%"
+                  onChange={value => { field.onChange(Number(value) || 0); onQueueTotals(); }}
+                />
+              )}
+            />
 
-          {/* Tax Rate */}
-          <Controller name={`items.${index}.taxRate`} control={control}
-            render={({ field }) => (
-              <InputNumber {...field} min={0} max={100} style={{ width: '100%' }}
-                addonAfter="%"
-                onChange={value => {
-                  const next = Number(value) || 0;
-                  field.onChange(next); onQueueTotals();
-                }}
-              />
-            )}
-          />
+            {/* Amount */}
+            <div style={{ fontWeight: 600, textAlign: 'right' }}><Rupee>₹</Rupee> {amount.toFixed(2)}</div>
 
-          {/* Row amount */}
-          <div style={{ fontWeight: 600, textAlign: 'right' }}><Rupee>₹</Rupee> {amount.toFixed(2)}</div>
+            {/* Remove */}
+            <Button type="text" danger onClick={() => onRemoveRow(index)} disabled={!canRemove} icon={<IoTrashBinSharp />} />
+          </div>
 
-          {/* Remove */}
-          <Button type="text" danger onClick={() => onRemoveRow(index)} disabled={!canRemove} icon={<IoTrashBinSharp />} />
+          {/* ── Row error / warning banner ── */}
+          {rowError && (
+            <div style={{
+              padding: '5px 44px 6px 44px',
+              borderBottom: '1px solid #f0f0f0',
+              borderLeft: `3px solid ${rowErrorBorderColor(rowError)}`,
+              background: rowErrorBg(rowError),
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 12,
+              color: rowError.severity === 'error' ? '#cf1322' : '#d46b08',
+            }}>
+              <span>{rowError.severity === 'error' ? '❌' : '⚠️'}</span>
+              <span>{rowError.message}</span>
+            </div>
+          )}
         </div>
       )}
     </Draggable>
   );
 }, (prev, next) =>
-  prev.rowId       === next.rowId     &&
-  prev.index       === next.index     &&
-  prev.canRemove   === next.canRemove &&
-  prev.itemOptions === next.itemOptions &&
-  prev.onSearchItems === next.onSearchItems &&
-  prev.onScrollItems === next.onScrollItems
+  prev.rowId          === next.rowId          &&
+  prev.index          === next.index          &&
+  prev.canRemove      === next.canRemove      &&
+  prev.itemOptions    === next.itemOptions    &&
+  prev.onSearchItems  === next.onSearchItems  &&
+  prev.onScrollItems  === next.onScrollItems  &&
+  prev.rowError       === next.rowError       &&
+  prev.onClearRowError === next.onClearRowError
 );

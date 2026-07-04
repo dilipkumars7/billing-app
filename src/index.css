@@ -28,6 +28,11 @@
   src: url('../public/fonts/LexendDeca-VariableFont_wght.ttf') format('truetype');
 }
 
+@font-face{
+  font-family: "Nexa";
+  src:url('../public/fonts/nexatext-trial-regular.otf') format('truetype');
+}
+
 
 *{
   font-family: 'DKSans';

@@ -26,6 +26,8 @@
     "axios": "^1.13.1",
     "backbone": "^1.6.1",
     "firebase": "^12.5.0",
+    "highcharts": "^12.6.0",
+    "highcharts-react-official": "^3.2.3",
     "iconsax-reactjs": "^0.0.8",
     "js-cookie": "^3.0.5",
     "qrcode.react": "^4.2.0",
